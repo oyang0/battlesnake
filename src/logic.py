@@ -99,14 +99,23 @@ def _avoid_my_neck(my_body: dict, possible_moves: List[str]) -> List[str]:
     """
     my_head = my_body[0]  # The first body coordinate is always the head
     my_neck = my_body[1]  # The segment of body right after the head is the 'neck'
+    possible_moves_ = {possible_move for possible_move in possible_moves}
 
-    if my_neck["x"] < my_head["x"]:  # my neck is left of my head
+    if (
+        my_neck["x"] < my_head["x"] and "left" in possible_moves_
+    ):  # my neck is left of my head
         possible_moves.remove("left")
-    elif my_neck["x"] > my_head["x"]:  # my neck is right of my head
+    elif (
+        my_neck["x"] > my_head["x"] and "right" in possible_moves_
+    ):  # my neck is right of my head
         possible_moves.remove("right")
-    elif my_neck["y"] < my_head["y"]:  # my neck is below my head
+    elif (
+        my_neck["y"] < my_head["y"] and "down" in possible_moves_
+    ):  # my neck is below my head
         possible_moves.remove("down")
-    elif my_neck["y"] > my_head["y"]:  # my neck is above my head
+    elif (
+        my_neck["y"] > my_head["y"] and "up" in possible_moves_
+    ):  # my neck is above my head
         possible_moves.remove("up")
 
     return possible_moves
@@ -124,14 +133,19 @@ def _avoid_hitting_walls(
     return: The list of remaining possible_moves, with 'wall' directions removed
     """
     my_head = my_body[0]  # The first body coordinate is always the head
+    possible_moves_ = {possible_move for possible_move in possible_moves}
 
-    if 0 == my_head["x"]:  # my head is at the left wall
+    if 0 == my_head["x"] and "left" in possible_moves_:  # my head is at the left wall
         possible_moves.remove("left")
-    if board_width - 1 == my_head["x"]:  # my head is at the right wall
+    if (
+        board_width - 1 == my_head["x"] and "right" in possible_moves_
+    ):  # my head is at the right wall
         possible_moves.remove("right")
-    if 0 == my_head["y"]:  # my head is at the bottom wall
+    if 0 == my_head["y"] and "down" in possible_moves_:  # my head is at the bottom wall
         possible_moves.remove("down")
-    if board_height - 1 == my_head["y"]:  # my head is at the top wall
+    if (
+        board_height - 1 == my_head["y"] and "up" in possible_moves_
+    ):  # my head is at the top wall
         possible_moves.remove("up")
 
     return possible_moves
@@ -147,27 +161,28 @@ def _avoid_hitting_myself(my_body: dict, possible_moves: List[str]) -> List[str]
     return: The list of remaining possible_moves, with 'body' directions removed
     """
     my_head = my_body[0]  # The first body coordinate is always the head
-    my_body = {tuple(body.items()) for body in my_body}
+    my_body_ = {tuple(body.items()) for body in my_body}
+    possible_moves_ = {possible_move for possible_move in possible_moves}
 
     if (
         ("x", my_head["x"] - 1),
         ("y", my_head["y"]),
-    ) in my_body:  # my body is to the left of my head
+    ) in my_body_ and "left" in possible_moves_:  # my body is to the left of my head
         possible_moves.remove("left")
     if (
         ("x", my_head["x"] + 1),
         ("y", my_head["y"]),
-    ) in my_body:  # my body is to the right of my head
+    ) in my_body_ and "right" in possible_moves_:  # my body is to the right of my head
         possible_moves.remove("right")
     if (
         ("x", my_head["x"]),
         ("y", my_head["y"] - 1),
-    ) in my_body:  # my body is below my head
+    ) in my_body_ and "down" in possible_moves_:  # my body is under my head
         possible_moves.remove("down")
     if (
         ("x", my_head["x"]),
         ("y", my_head["y"] + 1),
-    ) in my_body:  # my body is above my head
+    ) in my_body_ and "up" in possible_moves_:  # my body is over my head
         possible_moves.remove("up")
 
     return possible_moves
@@ -183,31 +198,32 @@ def _avoid_colliding_others(data: dict, possible_moves: List[str]) -> List[str]:
     return: The list of remaining possible_moves, with 'others' directions removed
     """
     my_head = my_body[0]  # The first body coordinate is always the head
-    snakes = {
+    body = {
         tuple(body.items())
         for snake in data["board"]["snakes"]
         for body in snake["body"]
     }
+    possible_moves_ = {possible_move for possible_move in possible_moves}
 
     if (
         ("x", my_head["x"] - 1),
         ("y", my_head["y"]),
-    ) in snakes:  # others are to the left of my head
+    ) in body and "left" in possible_moves_:  # others are to the left of my head
         possible_moves.remove("left")
     if (
         ("x", my_head["x"] + 1),
         ("y", my_head["y"]),
-    ) in snakes:  # others are to the right of my head
+    ) in body and "right" in possible_moves_:  # others are to the right of my head
         possible_moves.remove("right")
     if (
         ("x", my_head["x"]),
         ("y", my_head["y"] - 1),
-    ) in snakes:  # others are below my head
+    ) in body and "down" in possible_moves_:  # others are under my head
         possible_moves.remove("down")
     if (
         ("x", my_head["x"]),
         ("y", my_head["y"] + 1),
-    ) in snakes:  # others are above my head
+    ) in body and "up" in possible_moves_:  # others are over my head
         possible_moves.remove("up")
 
     return possible_moves
