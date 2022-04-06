@@ -71,7 +71,7 @@ def choose_move(data: dict) -> str:
 
     # TODO: Step 3 - Don't collide with others.
     # Use information from `data` to prevent your Battlesnake from colliding with others.
-    possible_moves = _avoid_colliding_others(data, possible_moves)
+    possible_moves = _avoid_colliding_others(my_body, possible_moves, data)
 
     # TODO: Step 4 - Find food.
     # Use information in `data` to seek out and find food.
@@ -188,12 +188,16 @@ def _avoid_hitting_myself(my_body: dict, possible_moves: List[str]) -> List[str]
     return possible_moves
 
 
-def _avoid_colliding_others(data: dict, possible_moves: List[str]) -> List[str]:
+def _avoid_colliding_others(
+    my_body: dict, possible_moves: List[str], data: dict
+) -> List[str]:
     """
-    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
-            For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
+    my_body: List of dictionaries of x/y coordinates for every segment of a Battlesnake.
+            e.g. [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
     possible_moves: List of strings. Moves to pick from.
             e.g. ["up", "down", "left", "right"]
+    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
+            For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
 
     return: The list of remaining possible_moves, with 'others' directions removed
     """
