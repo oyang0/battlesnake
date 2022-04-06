@@ -43,8 +43,9 @@ def handle_move():
 
     # TODO - look at the logic.py file to see how we decide what move to return!
     move = logic.choose_move(data)
+    shout = logic.choose_shout(data, move)
 
-    return {"move": move}
+    return {"move": move, "shout": shout}
 
 
 @app.post("/end")

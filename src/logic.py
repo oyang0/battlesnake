@@ -88,6 +88,29 @@ def choose_move(data: dict) -> str:
     return move
 
 
+def choose_shout(data: dict, move: str) -> str:
+    """
+    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
+    For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
+
+    move: A String, the single move to make. One of "up", "down", "left" or "right".
+
+    return: A String, the single shout to make.
+
+    Use the information in 'data' and 'move' to decide your next shout. The 'data' variable can be interacted
+    with as a Python Dictionary, and contains all of the information about the Battlesnake board
+    for each move of the game.
+
+    """
+    shouts = [
+        "why are we shouting??",
+        "I'm not really sure...",
+        f"I guess I'll go {move} then.",
+    ]
+    shout = random.choice(shouts)
+    return shout
+
+
 def _avoid_my_neck(my_body: dict, possible_moves: List[str]) -> List[str]:
     """
     my_body: List of dictionaries of x/y coordinates for every segment of a Battlesnake.
