@@ -78,7 +78,7 @@ def choose_move(data: dict) -> str:
     # food = data['board']['food']
 
     # Choose a random direction from the remaining possible_moves to move in, and then return that move
-    move = random.choice(possible_moves)
+    move = random.choice(possible_moves) if len(possible_moves) > 0 else "up"
     # TODO: Explore new strategies for picking a move that are better than random
 
     print(
