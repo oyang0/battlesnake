@@ -311,7 +311,9 @@ def choose_move(data: dict) -> str:
         model = games[data["game"]["id"]][data["you"]["id"]]["model"]
         if model:
             state = games[data["game"]["id"]][data["you"]["id"]]["state"]
-            removed_features, added_features = _update_state(data, state)
+            next_state = _refresh_state(data)
+            removed_features, added_features = _update_state(state, next_state)
+            games[data["game"]["id"]][data["you"]["id"]]["state"] = next_state
             model.update_accumulator(removed_features, added_features)
             sorted_moves = model.forward().argsort()[::-1]
             for sorted_move in sorted_moves:
@@ -476,26 +478,23 @@ def _avoid_colliding_others(
     return possible_moves
 
 
-def _update_state(data: dict, state: list) -> list:
+def _update_state(state: list, next_state: list) -> list:
     """
-    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
-    For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
+    state: List of new active features.
+            e.g. [0, 10, 20]
 
-    state: List of active features.
+    next_state: List of new active features.
             e.g. [0, 10, 20]
 
     return: The list of removed features and the list of added features
 
     """
-    active_features = _refresh_state(data)
-    active_features_ = {active_feature for active_feature in active_features}
     state_ = {feature for feature in state}
+    next_state_ = {next_feature for next_feature in next_state_}
 
-    removed_features = [feature for feature in state if feature not in active_features_]
+    removed_features = [feature for feature in state if feature not in next_state_]
     added_features = [
-        active_feature
-        for active_feature in active_features
-        if active_feature not in state_
+        next_feature for next_feature in next_state if next_feature not in state_
     ]
 
     return removed_features, added_features
