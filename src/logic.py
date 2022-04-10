@@ -319,13 +319,7 @@ def choose_move(data: dict) -> str:
                     move = move_mapping[sorted_move]
                     break
         else:
-            sizes = {
-                _flood_fill(
-                    my_body, possible_move, board_height, board_width, data
-                ): possible_move
-                for possible_move in possible_moves
-            }
-            move = sizes[max(sizes)]
+            move = random.choice(possible_moves)
     else:
         move = "up"
 
@@ -505,86 +499,6 @@ def _update_state(data: dict, state: list) -> list:
     ]
 
     return removed_features, added_features
-
-
-def _flood_fill(
-    my_body: dict,
-    move: str,
-    board_height: int,
-    board_width: int,
-    data: dict,
-) -> int:
-    """
-    my_body: List of dictionaries of x/y coordinates for every segment of a Battlesnake.
-            e.g. [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
-    possible_moves: move: A String, the single move to make.
-            e.g. "up"
-    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
-            For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
-
-    return: The size of an enclosed space
-    """
-    my_head = my_body[0]  # The first body coordinate is always the head
-    health = data["you"]["health"]
-    bodies = {
-        (body["x"], body["y"])
-        for snake in data["board"]["snakes"]
-        for body in snake["body"]
-    }
-    food = {(food["x"], food["y"]) for food in data["board"]["food"]}
-    hazards = {(hazard["x"], hazard["y"]) for hazard in data["board"]["hazards"]}
-
-    next_ = []
-    previous = set()
-
-    size = 0
-
-    if move == "left":
-        pixel = (my_head["x"] - 1, my_head["y"])
-    elif move == "right":
-        pixel = (my_head["x"] + 1, my_head["y"])
-    elif move == "down":
-        pixel = (my_head["x"], my_head["y"] - 1)
-    elif move == "up":
-        pixel = (my_head["x"], my_head["y"] + 1)
-
-    if (
-        pixel not in bodies
-        and pixel["x"] > 0
-        and pixel["x"] < board_width
-        and pixel["y"] > 0
-        and pixel["y"] < board_height
-    ):
-        next_.append(pixel)
-
-    while next_:
-        pixel = next_.pop()
-        previous.add(pixel)
-        
-        if pixel in food:
-            size += 100 - health
-        elif pixel in hazards:
-            size += 1 / 16
-        else:
-            size += 1
-
-        for adjacent in (
-            (pixel["x"] - 1, pixel["y"]),
-            (pixel["x"] + 1, pixel["y"]),
-            (pixel["x"], pixel["y"] - 1),
-            (pixel["x"], pixel["y"] + 1),
-        ):
-            if (
-                adjacent not in previous
-                and adjacent not in bodies
-                and adjacent["x"] > 0
-                and adjacent["x"] < board_width
-                and adjacent["y"] > 0
-                and adjacent["y"] < board_height
-            ):
-                next_.append(adjacent)
-
-    return size
 
 
 def choose_shout(data: dict, move: str) -> str:
