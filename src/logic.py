@@ -4,12 +4,59 @@ from typing import List, Dict
 from pickle import load
 from copy import deepcopy
 
+import numpy as np
+
 """
 This file can be a nice home for your Battlesnake's logic and helper functions.
 
 We have started this for you, and included some logic to remove your Battlesnake's 'neck'
 from the list of possible moves!
 """
+
+
+class NNUE:
+    "An efficiently updatable neural network for evaluation"
+
+    def __init__(self, ft_weight, ft_bias, l1_weight, l1_bias, l2_weight, l2_bias):
+        self.ft_weight = ft_weight
+        self.ft_bias = ft_bias
+        self.l1_weight = l1_weight
+        self.l1_bias = l1_bias
+        self.l2_weight = l2_weight
+        self.l2_bias = l2_bias
+
+        self.accumulator = None
+        self.refresh_accumulator([])
+
+    def forward(self, features=None):
+        accumulator = self._ft(features) if features else self.accumulator
+        l1_x = self._relu(accumulator)
+        l2_x = self._relu(self._l1(l1_x))
+
+        return self._l2(l2_x)
+
+    def refresh_accumulator(self, active_features):
+        self.accumulator = self.ft_bias.copy()
+        for active_feature in active_features:
+            self.accumulator += self.ft_weight[:, active_feature]
+
+    def update_accumulator(self, removed_features, added_features):
+        for removed_feature in removed_features:
+            self.accumulator -= self.ft_weight[:, removed_feature]
+        for added_feature in added_features:
+            self.accumulator += self.ft_weight[:, added_feature]
+
+    def _ft(self, features):
+        return self.ft_weight @ features + self.ft_bias
+
+    def _l1(self, features):
+        return self.l1_weight @ features + self.l1_bias
+
+    def _l2(self, features):
+        return self.l2_weight @ features + self.l2_bias
+
+    def _relu(self, features):
+        return np.maximum(0, features)
 
 
 def _get_feature_mapping() -> dict:
@@ -44,23 +91,22 @@ def _get_feature_mapping() -> dict:
     feature_mapping = {
         game_type: {
             board_size: {
-                x: {
-                    y: {
-                        piece: i * len(game_types)
-                        + j * len(board_sizes)
-                        + x * board_size
-                        + y * board_size
-                        + k * len(pieces)
-                        for k, piece in enumerate(pieces)
-                    }
-                    for y in range(board_size)
-                }
+                x: {y: {piece: None for piece in pieces} for y in range(board_size)}
                 for x in range(board_size)
             }
-            for j, board_size in enumerate(board_sizes)
+            for board_size in board_sizes
         }
-        for i, game_type in enumerate(game_types)
+        for game_type in game_types
     }
+
+    i = 0
+    for game_type in game_types:
+        for board_size in board_sizes:
+            for x in range(board_size):
+                for y in range(board_size):
+                    for piece in pieces:
+                        feature_mapping[game_type][board_size][x][y][piece] = i
+                        i += 1
 
     return feature_mapping
 
@@ -68,7 +114,7 @@ def _get_feature_mapping() -> dict:
 def _get_piece_mapping() -> dict:
     """
     return: The dictionary mapping battlesnakes to pieces
-    """     
+    """
     piece_mapping = {
         battlesnake: {
             piece: f'{battlesnake}_{piece}'
@@ -80,16 +126,27 @@ def _get_piece_mapping() -> dict:
     return piece_mapping
 
 
-moves = {0: "left", 1: "right", 2: "down", 3: "up"}
 games = {}
 models = []
+num_models = 0
 
 fo = open("src/nnue.pth", "rb")
 nnue = load(fo)
 fo.close()
 del fo
-models.append(nnue)
 
+nnue = NNUE(
+    nnue['ft.weight'],
+    nnue['ft.bias'],
+    nnue['l1.weight'],
+    nnue['l1.bias'],
+    nnue['l2.weight'],
+    nnue['l2.bias'],
+)
+models.append(nnue)
+num_models += 1
+
+move_mapping = {0: "left", 1: "right", 2: "down", 3: "up"}
 feature_mapping = _get_feature_mapping()
 piece_mapping = _get_piece_mapping()
 
@@ -123,11 +180,23 @@ def choose_start(data: dict) -> None:
     for each move of the game.
 
     """
-    model = models.pop() if models else deepcopy(nnue)
-    active_features = _refresh_state(data)
-    model.refresh_accumulator(active_features)
+    if models:
+        model = models.pop()
+    elif num_models <= 32:
+        model = deepcopy(nnue)
+        num_models += 1
+    else:
+        model = None
+    active_features = _refresh_state(data) if model else None
+    if model:
+        model.refresh_accumulator(active_features)
 
-    games[data["game"]["id"]] = {'model': model, 'state': active_features}
+    if data["game"]["id"] not in games:
+        games[data["game"]["id"]] = {}
+    games[data["game"]["id"]][data["you"]["id"]] = {
+        'model': model,
+        'state': active_features,
+    }
 
 
 def _refresh_state(data: dict) -> list:
@@ -146,7 +215,7 @@ def _refresh_state(data: dict) -> list:
     for food in data["board"]["food"]:
         active_features.add(mapping[food["x"]][food["y"]]["food"])
 
-    for hazard in board['hazards']:
+    for hazard in data["board"]["hazards"]:
         active_features.add(mapping[hazard["x"]][hazard["y"]]["hazard"])
 
     for snake in data["board"]["snakes"]:
@@ -165,15 +234,15 @@ def _refresh_state(data: dict) -> list:
         )
 
         for n, body in enumerate(snake["body"][1:]):
-            previous_piece = snake["body"][n]
+            previous_body = snake["body"][n]
 
-            if previous_piece["x"] < piece["x"]:
+            if previous_body["x"] < body["x"]:
                 active_features.add(mapping[body["x"]][body["y"]][pieces["left"]])
-            elif previous_piece["x"] > piece["x"]:
+            elif previous_body["x"] > body["x"]:
                 active_features.add(mapping[body["x"]][body["y"]][pieces["right"]])
-            elif previous_piece["y"] < piece["y"]:
+            elif previous_body["y"] < body["y"]:
                 active_features.add(mapping[body["x"]][body["y"]][pieces["down"]])
-            elif previous_piece["y"] > piece["y"]:
+            elif previous_body["y"] > body["y"]:
                 active_features.add(mapping[body["x"]][body["y"]][pieces["up"]])
             else:
                 active_features.add(mapping[body["x"]][body["y"]][pieces["bottom"]])
@@ -197,7 +266,9 @@ def choose_move(data: dict) -> str:
     """
     my_snake = data["you"]  # A dictionary describing your snake's position on the board
     my_head = my_snake["head"]  # A dictionary of coordinates like {"x": 0, "y": 0}
-    my_body = my_snake["body"]  # A list of coordinate dictionaries like [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
+    my_body = my_snake[
+        "body"
+    ]  # A list of coordinate dictionaries like [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
 
     # Uncomment the lines below to see what this data looks like in your output!
     # print(f"~~~ Turn: {data['turn']}  Game Mode: {data['game']['ruleset']['name']} ~~~")
@@ -216,7 +287,10 @@ def choose_move(data: dict) -> str:
     board = data['board']
     board_height = board['height']
     board_width = board['width']
-    possible_moves = _avoid_hitting_walls(my_body, possible_moves, board_height, board_width)
+    if data["game"]["ruleset"]["name"] != "wrapped":
+        possible_moves = _avoid_hitting_walls(
+            my_body, possible_moves, board_height, board_width
+        )
 
     # TODO: Step 2 - Don't hit yourself.
     # Use information from `my_body` to avoid moves that would collide with yourself.
@@ -234,15 +308,24 @@ def choose_move(data: dict) -> str:
     # move = random.choice(possible_moves) if possible_moves else "up"
     # TODO: Explore new strategies for picking a move that are better than random
     if possible_moves:
-        model = games[data["game"]["id"]]["model"]
-        state = games[data["game"]["id"]]["state"]
-        removed_features, added_features = _update_state(data, state)
-        model.update_accumulator(removed_features, added_features)
-        sorted_moves = model.forward().argsort()
-        for sorted_move in sorted_moves[::-1]:
-            if moves[sorted_move] in possible_moves:
-                move = moves[sorted_move]
-                break
+        model = games[data["game"]["id"]][data["you"]["id"]]["model"]
+        if model:
+            state = games[data["game"]["id"]][data["you"]["id"]]["state"]
+            removed_features, added_features = _update_state(data, state)
+            model.update_accumulator(removed_features, added_features)
+            sorted_moves = model.forward().argsort()[::-1]
+            for sorted_move in sorted_moves:
+                if move_mapping[sorted_move] in possible_moves:
+                    move = move_mapping[sorted_move]
+                    break
+        else:
+            sizes = {
+                _flood_fill(
+                    my_body, possible_move, board_height, board_width, data
+                ): possible_move
+                for possible_move in possible_moves
+            }
+            move = sizes[max(sizes)]
     else:
         move = "up"
 
@@ -367,8 +450,8 @@ def _avoid_colliding_others(
     return: The list of remaining possible_moves, with 'others' directions removed
     """
     my_head = my_body[0]  # The first body coordinate is always the head
-    body = {
-        tuple(body.items())
+    bodies = {
+        (body["x"], body["y"])
         for snake in data["board"]["snakes"]
         for body in snake["body"]
         if snake["id"] != data["you"]["id"]
@@ -378,22 +461,22 @@ def _avoid_colliding_others(
     if (
         ("x", my_head["x"] - 1),
         ("y", my_head["y"]),
-    ) in body and "left" in possible_moves_:  # others are to the left of my head
+    ) in bodies and "left" in possible_moves_:  # others are to the left of my head
         possible_moves.remove("left")
     if (
         ("x", my_head["x"] + 1),
         ("y", my_head["y"]),
-    ) in body and "right" in possible_moves_:  # others are to the right of my head
+    ) in bodies and "right" in possible_moves_:  # others are to the right of my head
         possible_moves.remove("right")
     if (
         ("x", my_head["x"]),
         ("y", my_head["y"] - 1),
-    ) in body and "down" in possible_moves_:  # others are under my head
+    ) in bodies and "down" in possible_moves_:  # others are under my head
         possible_moves.remove("down")
     if (
         ("x", my_head["x"]),
         ("y", my_head["y"] + 1),
-    ) in body and "up" in possible_moves_:  # others are over my head
+    ) in bodies and "up" in possible_moves_:  # others are over my head
         possible_moves.remove("up")
 
     return possible_moves
@@ -422,6 +505,86 @@ def _update_state(data: dict, state: list) -> list:
     ]
 
     return removed_features, added_features
+
+
+def _flood_fill(
+    my_body: dict,
+    move: str,
+    board_height: int,
+    board_width: int,
+    data: dict,
+) -> int:
+    """
+    my_body: List of dictionaries of x/y coordinates for every segment of a Battlesnake.
+            e.g. [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
+    possible_moves: move: A String, the single move to make.
+            e.g. "up"
+    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
+            For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
+
+    return: The size of an enclosed space
+    """
+    my_head = my_body[0]  # The first body coordinate is always the head
+    health = data["you"]["health"]
+    bodies = {
+        (body["x"], body["y"])
+        for snake in data["board"]["snakes"]
+        for body in snake["body"]
+    }
+    food = {(food["x"], food["y"]) for food in data["board"]["food"]}
+    hazards = {(hazard["x"], hazard["y"]) for hazard in data["board"]["hazards"]}
+
+    next_ = []
+    previous = set()
+
+    size = 0
+
+    if move == "left":
+        pixel = (my_head["x"] - 1, my_head["y"])
+    elif move == "right":
+        pixel = (my_head["x"] + 1, my_head["y"])
+    elif move == "down":
+        pixel = (my_head["x"], my_head["y"] - 1)
+    elif move == "up":
+        pixel = (my_head["x"], my_head["y"] + 1)
+
+    if (
+        pixel not in bodies
+        and pixel["x"] > 0
+        and pixel["x"] < board_width
+        and pixel["y"] > 0
+        and pixel["y"] < board_height
+    ):
+        next_.append(pixel)
+
+    while next_:
+        pixel = next_.pop()
+        previous.add(pixel)
+        
+        if pixel in food:
+            size += 100 - health
+        elif pixel in hazards:
+            size += 1 / 16
+        else:
+            size += 1
+
+        for adjacent in (
+            (pixel["x"] - 1, pixel["y"]),
+            (pixel["x"] + 1, pixel["y"]),
+            (pixel["x"], pixel["y"] - 1),
+            (pixel["x"], pixel["y"] + 1),
+        ):
+            if (
+                adjacent not in previous
+                and adjacent not in bodies
+                and adjacent["x"] > 0
+                and adjacent["x"] < board_width
+                and adjacent["y"] > 0
+                and adjacent["y"] < board_height
+            ):
+                next_.append(adjacent)
+
+    return size
 
 
 def choose_shout(data: dict, move: str) -> str:
@@ -459,6 +622,9 @@ def choose_end(data: dict) -> None:
     for each move of the game.
 
     """
-    model = games[data["game"]["id"]]["model"]
+    model = games[data["game"]["id"]][data["you"]["id"]]["model"]
     models.append(model)
-    del games[data["game"]["id"]]
+    if len(games[data["game"]["id"]]) > 1:
+        del games[data["game"]["id"]][data["you"]["id"]]
+    else:
+        del games[data["game"]["id"]]
