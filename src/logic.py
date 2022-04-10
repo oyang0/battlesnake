@@ -1,12 +1,143 @@
 import random
 from typing import List, Dict
 
+import numpy as np
+from pickle import load
+from copy import deepcopy
+
 """
 This file can be a nice home for your Battlesnake's logic and helper functions.
 
 We have started this for you, and included some logic to remove your Battlesnake's 'neck'
 from the list of possible moves!
 """
+
+
+class NNUE:
+    "An efficiently updatable neural network for evaluation"
+
+    def __init__(self, ft_weight, ft_bias, l1_weight, l1_bias, l2_weight, l2_bias):
+        self.ft_weight = ft_weight
+        self.ft_bias = ft_bias
+        self.l1_weight = l1_weight
+        self.l1_bias = l1_bias
+        self.l2_weight = l2_weight
+        self.l2_bias = l2_bias
+
+        self.accumulator = None
+        self.refresh_accumulator([])
+
+    def foward(self, features=None):
+        accumulator = self._ft(features) if features else self.accumulator
+        l1_x = self._relu(accumulator)
+        l2_x = self._relu(self._l1(l1_x))
+
+        return self._l2(l2_x)
+
+    def refresh_accumulator(self, active_features):
+        self.accumulator = self.ft_bias.copy()
+        for active_feature in active_features:
+            self.accumulator += self.ft_weight[:, active_feature]
+
+    def update_accumulator(self, removed_features, added_features):
+        for removed_feature in removed_features:
+            self.accumulator -= self.ft_weight[:, removed_feature]
+        for added_feature in added_features:
+            self.accumulator += self.ft_weight[:, added_feature]
+
+    def _ft(self, features):
+        return self.ft_weight @ features + self.ft_bias
+
+    def _l1(self, features):
+        return self.l1_weight @ features + self.l1_bias
+
+    def _l2(self, features):
+        return self.l2_weight @ features + self.l2_bias
+
+    def _relu(self, features):
+        return np.maximum(0, features)
+
+
+def _get_feature_mapping() -> dict:
+    """
+    return: The dictionary mapping features to indices
+    """
+    game_types = ("constrictor", "royale", "solo", "squad", "standard", "wrapped")
+    board_sizes = (7, 11, 19)
+    pieces = (
+        'you_left',
+        'you_right',
+        'you_down',
+        'you_up',
+        'you_bottom',
+        'you_head',
+        'squad_left',
+        'squad_right',
+        'squad_down',
+        'squad_up',
+        'squad_bottom',
+        'squad_head',
+        'snake_left',
+        'snake_right',
+        'snake_down',
+        'snake_up',
+        'snake_bottom',
+        'snake_head',
+        'food',
+        'hazard',
+    )
+
+    feature_mapping = {
+        game_type: {
+            board_size: {
+                x: {
+                    y: {
+                        piece: i * len(game_types)
+                        + j * len(board_sizes)
+                        + x * board_size
+                        + y * board_size
+                        + k * len(pieces)
+                        for k, piece in enumerate(pieces)
+                    }
+                    for y in range(board_size)
+                }
+                for x in range(board_size)
+            }
+            for j, board_size in enumerate(board_sizes)
+        }
+        for i, game_type in enumerate(game_types)
+    }
+
+    return feature_mapping
+
+
+def _get_piece_mapping() -> dict:
+    """
+    return: The dictionary mapping battlesnakes to pieces
+    """     
+    piece_mapping = {
+        battlesnake: {
+            piece: f'{battlesnake}_{piece}'
+            for piece in ['left', 'right', 'down', 'up', 'bottom', 'head']
+        }
+        for battlesnake in ['you', 'squad', 'snake']
+    }
+
+    return piece_mapping
+
+
+moves = {0: "left", 1: "right", 2: "down", 3: "up"}
+games = {}
+models = []
+
+fo = open("nnue.pth", "rb")
+nnue = load(fo)
+fo.close()
+del fo
+models.append(nnue)
+
+feature_mapping = _get_feature_mapping()
+piece_mapping = _get_piece_mapping()
 
 
 def get_info() -> dict:
@@ -26,6 +157,78 @@ def get_info() -> dict:
     }
 
 
+def choose_start(data: dict) -> None:
+    """
+    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
+    For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
+
+    return: None.
+
+    Use the information in 'data' to initialize your next game. The 'data' variable can be interacted
+    with as a Python Dictionary, and contains all of the information about the Battlesnake board
+    for each move of the game.
+
+    """
+    model = models.pop() if models else deepcopy(nnue)
+    active_features = _refresh_state(data)
+    model.refresh_accumulator(active_features)
+
+    games[data["game"]["id"]] = {'model': model, 'state': active_features}
+
+
+def _refresh_state(data: dict) -> list:
+    """
+    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
+    For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
+
+    return: The list of active features
+
+    """
+    active_features = set()
+
+    mapping = feature_mapping[data["game"]["ruleset"]["name"]]
+    mapping = mapping[data["board"]["height"]]
+
+    for food in data["board"]["food"]:
+        active_features.add(mapping[food["x"]][food["y"]]["food"])
+
+    for hazard in board['hazards']:
+        active_features.add(mapping[hazard["x"]][hazard["y"]]["hazard"])
+
+    for snake in data["board"]["snakes"]:
+        if snake["id"] == data["you"]["id"]:
+            pieces = piece_mapping["you"]
+        elif (
+            data["game"]["ruleset"]["name"] == "squad"
+            and snake["squad"] == data["you"]["squad"]
+        ):
+            pieces = piece_mapping["squad"]
+        else:
+            pieces = piece_mapping["snake"]
+
+        active_features.add(
+            mapping[snake["head"]["x"]][snake["head"]["y"]][pieces["head"]]
+        )
+
+        for n, body in enumerate(snake["body"][1:]):
+            previous_piece = snake["body"][n]
+
+            if previous_piece["x"] < piece["x"]:
+                active_features.add(mapping[body["x"]][body["y"]][pieces["left"]])
+            elif previous_piece["x"] > piece["x"]:
+                active_features.add(mapping[body["x"]][body["y"]][pieces["right"]])
+            elif previous_piece["y"] < piece["y"]:
+                active_features.add(mapping[body["x"]][body["y"]][pieces["down"]])
+            elif previous_piece["y"] > piece["y"]:
+                active_features.add(mapping[body["x"]][body["y"]][pieces["up"]])
+            else:
+                active_features.add(mapping[body["x"]][body["y"]][pieces["bottom"]])
+
+    active_features = [active_feature for active_feature in active_features]
+
+    return active_features
+
+
 def choose_move(data: dict) -> str:
     """
     data: Dictionary of all Game Board data as received from the Battlesnake Engine.
@@ -40,16 +243,14 @@ def choose_move(data: dict) -> str:
     """
     my_snake = data["you"]  # A dictionary describing your snake's position on the board
     my_head = my_snake["head"]  # A dictionary of coordinates like {"x": 0, "y": 0}
-    my_body = my_snake[
-        "body"
-    ]  # A list of coordinate dictionaries like [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
+    my_body = my_snake["body"]  # A list of coordinate dictionaries like [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
 
     # Uncomment the lines below to see what this data looks like in your output!
-    print(f"~~~ Turn: {data['turn']}  Game Mode: {data['game']['ruleset']['name']} ~~~")
-    print(f"All board data this turn: {data}")
-    print(f"My Battlesnake this turn is: {my_snake}")
-    print(f"My Battlesnakes head this turn is: {my_head}")
-    print(f"My Battlesnakes body this turn is: {my_body}")
+    # print(f"~~~ Turn: {data['turn']}  Game Mode: {data['game']['ruleset']['name']} ~~~")
+    # print(f"All board data this turn: {data}")
+    # print(f"My Battlesnake this turn is: {my_snake}")
+    # print(f"My Battlesnakes head this turn is: {my_head}")
+    # print(f"My Battlesnakes body this turn is: {my_body}")
 
     possible_moves = ["up", "down", "left", "right"]
 
@@ -61,9 +262,7 @@ def choose_move(data: dict) -> str:
     board = data['board']
     board_height = board['height']
     board_width = board['width']
-    possible_moves = _avoid_hitting_walls(
-        my_body, possible_moves, board_height, board_width
-    )
+    possible_moves = _avoid_hitting_walls(my_body, possible_moves, board_height, board_width)
 
     # TODO: Step 2 - Don't hit yourself.
     # Use information from `my_body` to avoid moves that would collide with yourself.
@@ -78,37 +277,26 @@ def choose_move(data: dict) -> str:
     # food = data['board']['food']
 
     # Choose a random direction from the remaining possible_moves to move in, and then return that move
-    move = random.choice(possible_moves) if len(possible_moves) > 0 else "up"
+    # move = random.choice(possible_moves) if possible_moves else "up"
     # TODO: Explore new strategies for picking a move that are better than random
+    if possible_moves:
+        model = games[data["game"]["id"]]["model"]
+        state = games[data["game"]["id"]]["state"]
+        removed_features, added_features = _update_state(data, state)
+        model.update_accumulator(removed_features, added_features)
+        sorted_moves = model.forward().argsort()
+        for sorted_move in sorted_moves[::-1]:
+            if moves[sorted_move] in possible_moves:
+                move = moves[sorted_move]
+                break
+    else:
+        move = "up"
 
     print(
         f"{data['game']['id']} MOVE {data['turn']}: {move} picked from all valid options in {possible_moves}"
     )
 
     return move
-
-
-def choose_shout(data: dict, move: str) -> str:
-    """
-    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
-    For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
-
-    move: A String, the single move to make. One of "up", "down", "left" or "right".
-
-    return: A String, the single shout to make.
-
-    Use the information in 'data' and 'move' to decide your next shout. The 'data' variable can be interacted
-    with as a Python Dictionary, and contains all of the information about the Battlesnake board
-    for each move of the game.
-
-    """
-    shouts = [
-        "why are we shouting??",
-        "I'm not really sure...",
-        f"I guess I'll go {move} then.",
-    ]
-    shout = random.choice(shouts)
-    return shout
 
 
 def _avoid_my_neck(my_body: dict, possible_moves: List[str]) -> List[str]:
@@ -229,6 +417,7 @@ def _avoid_colliding_others(
         tuple(body.items())
         for snake in data["board"]["snakes"]
         for body in snake["body"]
+        if snake["id"] != data["you"]["id"]
     }
     possible_moves_ = {possible_move for possible_move in possible_moves}
 
@@ -254,3 +443,68 @@ def _avoid_colliding_others(
         possible_moves.remove("up")
 
     return possible_moves
+
+
+def _update_state(data: dict, state: list) -> list:
+    """
+    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
+    For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
+
+    state: List of active features.
+            e.g. [0, 10, 20]
+
+    return: The list of removed features and the list of added features
+
+    """
+    active_features = _refresh_state(data)
+    active_features_ = {active_feature for active_feature in active_features}
+    state_ = {feature for feature in state}
+
+    removed_features = [feature for feature in state if feature not in active_features_]
+    added_features = [
+        active_feature
+        for active_feature in active_features
+        if active_feature not in state_
+    ]
+
+    return removed_features, added_features
+
+
+def choose_shout(data: dict, move: str) -> str:
+    """
+    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
+    For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
+
+    move: A String, the single move to make. One of "up", "down", "left" or "right".
+
+    return: A String, the single shout to make.
+
+    Use the information in 'data' and 'move' to decide your next shout. The 'data' variable can be interacted
+    with as a Python Dictionary, and contains all of the information about the Battlesnake board
+    for each move of the game.
+
+    """
+    shouts = [
+        "why are we shouting??",
+        "I'm not really sure...",
+        f"I guess I'll go {move} then.",
+    ]
+    shout = random.choice(shouts)
+    return shout
+
+
+def choose_end(data: dict) -> None:
+    """
+    data: Dictionary of all Game Board data as received from the Battlesnake Engine.
+    For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
+
+    return: None.
+
+    Use the information in 'data' to delete your previous game. The 'data' variable can be interacted
+    with as a Python Dictionary, and contains all of the information about the Battlesnake board
+    for each move of the game.
+
+    """
+    model = games[data["game"]["id"]]["model"]
+    models.append(model)
+    del games[data["game"]["id"]]

@@ -28,6 +28,8 @@ def handle_start():
     request.json contains information about the game that's about to be played.
     """
     data = request.get_json()
+    
+    logic.choose_start(data)
 
     print(f"{data['game']['id']} START")
     return "ok"
@@ -55,6 +57,8 @@ def handle_end():
     It's purely for informational purposes, you don't have to make any decisions here.
     """
     data = request.get_json()
+    
+    logic.choose_end(data)
 
     print(f"{data['game']['id']} END")
     return "ok"
