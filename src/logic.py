@@ -403,27 +403,27 @@ def _avoid_hitting_myself(my_body: dict, possible_moves: List[str]) -> List[str]
     return: The list of remaining possible_moves, with 'body' directions removed
     """
     my_head = my_body[0]  # The first body coordinate is always the head
-    my_body_ = {tuple(body.items()) for body in my_body}
+    my_body_ = {(body["x"], body["y"]) for body in my_body}
     possible_moves_ = {possible_move for possible_move in possible_moves}
 
     if (
-        ("x", my_head["x"] - 1),
-        ("y", my_head["y"]),
+        my_head["x"] - 1,
+        my_head["y"],
     ) in my_body_ and "left" in possible_moves_:  # my body is to the left of my head
         possible_moves.remove("left")
     if (
-        ("x", my_head["x"] + 1),
-        ("y", my_head["y"]),
+        my_head["x"] + 1,
+        my_head["y"],
     ) in my_body_ and "right" in possible_moves_:  # my body is to the right of my head
         possible_moves.remove("right")
     if (
-        ("x", my_head["x"]),
-        ("y", my_head["y"] - 1),
+        my_head["x"],
+        my_head["y"] - 1,
     ) in my_body_ and "down" in possible_moves_:  # my body is under my head
         possible_moves.remove("down")
     if (
-        ("x", my_head["x"]),
-        ("y", my_head["y"] + 1),
+        my_head["x"],
+        my_head["y"] + 1,
     ) in my_body_ and "up" in possible_moves_:  # my body is over my head
         possible_moves.remove("up")
 
@@ -453,23 +453,23 @@ def _avoid_colliding_others(
     possible_moves_ = {possible_move for possible_move in possible_moves}
 
     if (
-        ("x", my_head["x"] - 1),
-        ("y", my_head["y"]),
+        my_head["x"] - 1,
+        my_head["y"],
     ) in bodies and "left" in possible_moves_:  # others are to the left of my head
         possible_moves.remove("left")
     if (
-        ("x", my_head["x"] + 1),
-        ("y", my_head["y"]),
+        my_head["x"] + 1,
+        my_head["y"],
     ) in bodies and "right" in possible_moves_:  # others are to the right of my head
         possible_moves.remove("right")
     if (
-        ("x", my_head["x"]),
-        ("y", my_head["y"] - 1),
+        my_head["x"],
+        my_head["y"] - 1,
     ) in bodies and "down" in possible_moves_:  # others are under my head
         possible_moves.remove("down")
     if (
-        ("x", my_head["x"]),
-        ("y", my_head["y"] + 1),
+        my_head["x"],
+        my_head["y"] + 1,
     ) in bodies and "up" in possible_moves_:  # others are over my head
         possible_moves.remove("up")
 
