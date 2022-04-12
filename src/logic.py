@@ -29,7 +29,7 @@ class NNUE:
         self.refresh_accumulator([])
 
     def forward(self, features=None):
-        accumulator = self._ft(features) if features else self.accumulator
+        accumulator = self._ft(features) if features is not None else self.accumulator
         l1_x = self._relu(accumulator)
         l2_x = self._relu(self._l1(l1_x))
 
@@ -62,93 +62,49 @@ class NNUE:
 def _get_feature_mapping() -> dict:
     """
     return: The dictionary mapping features to indices
+
     """
-    game_types = ("constrictor", "royale", "solo", "squad", "standard", "wrapped")
-    board_sizes = (7, 11, 19)
-    pieces = (
-        'you_left',
-        'you_right',
-        'you_down',
-        'you_up',
-        'you_bottom',
-        'you_head',
-        'squad_left',
-        'squad_right',
-        'squad_down',
-        'squad_up',
-        'squad_bottom',
-        'squad_head',
-        'snake_left',
-        'snake_right',
-        'snake_down',
-        'snake_up',
-        'snake_bottom',
-        'snake_head',
-        'food',
-        'hazard',
-    )
+    game_types = ["constrictor", "royale", "solo", "squad", "standard", "wrapped"]
+    board_sizes = [7, 11, 19]
+    players = ["you", "squad", "snake", "food", "hazard"]
+    players_ = {"you", "squad", "snake"}
+    pieces = ["left", "right", "down", "up", "bottom", "head"]
+    pieces_ = {"head"}
+    healths = [1, 101]
 
-    feature_mapping = {
-        game_type: {
-            board_size: {
-                x: {y: {piece: None for piece in pieces} for y in range(board_size)}
-                for x in range(board_size)
-            }
-            for board_size in board_sizes
-        }
-        for game_type in game_types
-    }
-
-    i = 0
+    feature_mapping = {}
+    n = 0
     for game_type in game_types:
+        feature_mapping[game_type] = {}
         for board_size in board_sizes:
+            feature_mapping[game_type][board_size] = {}
             for x in range(board_size):
+                feature_mapping[game_type][board_size][x] = {}
                 for y in range(board_size):
-                    for piece in pieces:
-                        feature_mapping[game_type][board_size][x][y][piece] = i
-                        i += 1
+                    feature_mapping[game_type][board_size][x][y] = {}
+                    for player in players:
+                        if player in players_:
+                            feature_mapping[game_type][board_size][x][y][player] = {}
+                            for piece in pieces:
+                                if piece in pieces_:
+                                    feature_mapping[game_type][board_size][x][y][
+                                        player
+                                    ][piece] = {}
+                                    for health in range(healths[0], healths[1]):
+                                        feature_mapping[game_type][board_size][x][y][
+                                            player
+                                        ][piece][health] = n
+                                        n += 1
+                                else:
+                                    feature_mapping[game_type][board_size][x][y][
+                                        player
+                                    ][piece] = n
+                                    n += 1
+                        else:
+                            feature_mapping[game_type][board_size][x][y][player] = n
+                            n += 1
 
     return feature_mapping
-
-
-def _get_piece_mapping() -> dict:
-    """
-    return: The dictionary mapping battlesnakes to pieces
-    """
-    piece_mapping = {
-        battlesnake: {
-            piece: f'{battlesnake}_{piece}'
-            for piece in ['left', 'right', 'down', 'up', 'bottom', 'head']
-        }
-        for battlesnake in ['you', 'squad', 'snake']
-    }
-
-    return piece_mapping
-
-
-games = {}
-models = []
-num_models = 0
-
-fo = open("src/nnue.pth", "rb")
-nnue = load(fo)
-fo.close()
-del fo
-
-nnue = NNUE(
-    nnue['ft.weight'],
-    nnue['ft.bias'],
-    nnue['l1.weight'],
-    nnue['l1.bias'],
-    nnue['l2.weight'],
-    nnue['l2.bias'],
-)
-models.append(nnue)
-num_models += 1
-
-move_mapping = {0: "left", 1: "right", 2: "down", 3: "up"}
-feature_mapping = _get_feature_mapping()
-piece_mapping = _get_piece_mapping()
 
 
 def get_info() -> dict:
@@ -180,76 +136,80 @@ def choose_start(data: dict) -> None:
     for each move of the game.
 
     """
-    if models:
-        model = models.pop()
-    elif num_models <= 32:
-        model = deepcopy(nnue)
-        num_models += 1
+    if MODELS:
+        model = MODELS.pop()
+    elif NUM_MODELS <= 8:
+        model = deepcopy(NNUE)
+        NUM_MODELS += 1
     else:
         model = None
-    active_features = _refresh_state(data) if model else None
+
     if model:
+        active_features = _refresh_state(data)
         model.refresh_accumulator(active_features)
 
-    if data["game"]["id"] not in games:
-        games[data["game"]["id"]] = {}
-    games[data["game"]["id"]][data["you"]["id"]] = {
-        'model': model,
-        'state': active_features,
-    }
+        if data["game"]["id"] not in GAMES:
+            GAMES[data["game"]["id"]] = {}
+
+        GAMES[data["game"]["id"]][data["you"]["id"]] = {
+            'model': model,
+            'state': active_features,
+        }
 
 
-def _refresh_state(data: dict) -> list:
+def _refresh_state(data: dict) -> np.ndarray:
     """
     data: Dictionary of all Game Board data as received from the Battlesnake Engine.
     For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
 
-    return: The list of active features
+    return: The tensor representing a state
 
     """
-    active_features = set()
+    features = set()
 
-    mapping = feature_mapping[data["game"]["ruleset"]["name"]]
-    mapping = mapping[data["board"]["height"]]
+    feature_mapping = FEATURE_MAPPING[data["game"]["ruleset"]["name"]]
+    feature_mapping = feature_mapping[data["board"]["height"]]
 
     for food in data["board"]["food"]:
-        active_features.add(mapping[food["x"]][food["y"]]["food"])
+        features.add(feature_mapping[food["x"]][food["y"]]["food"])
 
     for hazard in data["board"]["hazards"]:
-        active_features.add(mapping[hazard["x"]][hazard["y"]]["hazard"])
+        features.add(feature_mapping[hazard["x"]][hazard["y"]]["hazard"])
 
     for snake in data["board"]["snakes"]:
         if snake["id"] == data["you"]["id"]:
-            pieces = piece_mapping["you"]
+            player = "you"
         elif (
             data["game"]["ruleset"]["name"] == "squad"
             and snake["squad"] == data["you"]["squad"]
         ):
-            pieces = piece_mapping["squad"]
+            player = "squad"
         else:
-            pieces = piece_mapping["snake"]
+            player = "snake"
 
-        active_features.add(
-            mapping[snake["head"]["x"]][snake["head"]["y"]][pieces["head"]]
+        features.add(
+            feature_mapping[snake["head"]["x"]][snake["head"]["y"]][player]["head"][
+                snake["health"]
+            ]
         )
 
         for n, body in enumerate(snake["body"][1:]):
             previous_body = snake["body"][n]
 
             if previous_body["x"] < body["x"]:
-                active_features.add(mapping[body["x"]][body["y"]][pieces["left"]])
+                features.add(feature_mapping[body["x"]][body["y"]][player]["left"])
             elif previous_body["x"] > body["x"]:
-                active_features.add(mapping[body["x"]][body["y"]][pieces["right"]])
+                features.add(feature_mapping[body["x"]][body["y"]][player]["right"])
             elif previous_body["y"] < body["y"]:
-                active_features.add(mapping[body["x"]][body["y"]][pieces["down"]])
+                features.add(feature_mapping[body["x"]][body["y"]][player]["down"])
             elif previous_body["y"] > body["y"]:
-                active_features.add(mapping[body["x"]][body["y"]][pieces["up"]])
+                features.add(feature_mapping[body["x"]][body["y"]][player]["up"])
             else:
-                active_features.add(mapping[body["x"]][body["y"]][pieces["bottom"]])
+                features.add(feature_mapping[body["x"]][body["y"]][player]["bottom"])
 
-    active_features = [active_feature for active_feature in active_features]
+    state = np.asanyarray([feature for feature in features], dtype=np.half)
 
-    return active_features
+    return state
 
 
 def choose_move(data: dict) -> str:
@@ -308,17 +268,20 @@ def choose_move(data: dict) -> str:
     # move = random.choice(possible_moves) if possible_moves else "up"
     # TODO: Explore new strategies for picking a move that are better than random
     if possible_moves:
-        model = games[data["game"]["id"]][data["you"]["id"]]["model"]
-        if model:
-            state = games[data["game"]["id"]][data["you"]["id"]]["state"]
+        if (
+            data["game"]["id"] in GAMES
+            and data["you"]["id"] in GAMES[data["game"]["id"]]
+        ):
+            model = GAMES[data["game"]["id"]][data["you"]["id"]]["model"]
+            state = GAMES[data["game"]["id"]][data["you"]["id"]]["state"]
             next_state = _refresh_state(data)
             removed_features, added_features = _update_state(state, next_state)
-            games[data["game"]["id"]][data["you"]["id"]]["state"] = next_state
+            GAMES[data["game"]["id"]][data["you"]["id"]]["state"] = next_state
             model.update_accumulator(removed_features, added_features)
             sorted_moves = model.forward().argsort()[::-1]
             for sorted_move in sorted_moves:
-                if move_mapping[sorted_move] in possible_moves:
-                    move = move_mapping[sorted_move]
+                if MOVE_MAPPING[sorted_move] in possible_moves:
+                    move = MOVE_MAPPING[sorted_move]
                     break
         else:
             move = random.choice(possible_moves)
@@ -490,7 +453,7 @@ def _update_state(state: list, next_state: list) -> list:
 
     """
     state_ = {feature for feature in state}
-    next_state_ = {next_feature for next_feature in next_state_}
+    next_state_ = {next_feature for next_feature in next_state}
 
     removed_features = [feature for feature in state if feature not in next_state_]
     added_features = [
@@ -535,9 +498,33 @@ def choose_end(data: dict) -> None:
     for each move of the game.
 
     """
-    model = games[data["game"]["id"]][data["you"]["id"]]["model"]
-    models.append(model)
-    if len(games[data["game"]["id"]]) > 1:
-        del games[data["game"]["id"]][data["you"]["id"]]
-    else:
-        del games[data["game"]["id"]]
+    if data["game"]["id"] in GAMES and data["you"]["id"] in GAMES[data["game"]["id"]]:
+        model = GAMES[data["game"]["id"]][data["you"]["id"]]["model"]
+        MODELS.append(model)
+        if len(GAMES[data["game"]["id"]]) > 1:
+            del GAMES[data["game"]["id"]][data["you"]["id"]]
+        else:
+            del GAMES[data["game"]["id"]]
+
+
+GAMES = {}
+MODELS = []
+
+with open("src/nnue.pth", "rb") as nnue:
+    nnue = load(nnue)
+
+NNUE = NNUE(
+    nnue['ft.weight'],
+    nnue['ft.bias'],
+    nnue['l1.weight'],
+    nnue['l1.bias'],
+    nnue['l2.weight'],
+    nnue['l2.bias'],
+)
+MODELS.append(NNUE)
+NUM_MODELS = 1
+
+MOVE_MAPPING = {0: "left", 1: "right", 2: "down", 3: "up"}
+FEATURE_MAPPING = _get_feature_mapping()
+
+del nnue
