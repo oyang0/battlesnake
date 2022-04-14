@@ -4,7 +4,8 @@ import os
 from flask import Flask
 from flask import request
 
-import logic
+from nnue import NNUE
+from logic import Logic
 
 
 app = Flask(__name__)
@@ -71,10 +72,12 @@ def identify_server(response):
 
 
 if __name__ == "__main__":
+    logic = Logic(model_file="src/model.pth", max_models=4)
+    
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
     host = "0.0.0.0"
-    port = int(os.environ.get("PORT", "8080"))
+    port = int(os.environ.get("PORT", "8081"))
 
     print(f"\nRunning Battlesnake server at http://{host}:{port}")
     app.env = 'development'
