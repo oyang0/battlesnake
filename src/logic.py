@@ -162,6 +162,8 @@ class Logic:
                 model = self.models[(game_id, your_id)]
                 model.update_accumulator(removed_features, added_features)
                 sorted_moves = model.forward().argsort()[::-1]
+                
+                self.active_features[(game_id, your_id)] = next_features
 
                 for sorted_move in sorted_moves:
                     mapped_move = self.move_mapping[sorted_move]
@@ -222,6 +224,7 @@ class Logic:
             self.recycle_bin.append(model)
 
             del self.models[(game_id, your_id)]
+            del self.active_features[(game_id, your_id)]
 
     def _avoid_my_neck(self, my_body, possible_moves):
         """
