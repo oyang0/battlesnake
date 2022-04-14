@@ -72,25 +72,25 @@ class Logic:
 
             if self.recycle_bin():
                 game_id = tools.get_game_id(data)
-                your_id = tools.get_your_id(data)
+                my_id = tools.get_my_id(data)
 
                 model = self.recycle_bin.pop()
                 active_features = self._get_active_features(data)
                 model.refresh_accumulator(active_features)
 
-                self.models[(game_id, your_id)] = model
-                self.active_features[(game_id, your_id)] = active_features
+                self.models[(game_id, my_id)] = model
+                self.active_features[(game_id, my_id)] = active_features
 
             elif len(self.models) + len(self.recycle_bin) <= self.max_models:
                 game_id = tools.get_game_id(data)
-                your_id = tools.get_your_id(data)
+                my_id = tools.get_my_id(data)
 
                 model = deepcopy(self.model)
                 active_features = self._get_active_features(data)
                 model.refresh_accumulator(active_features)
 
-                self.models[(game_id, your_id)] = model
-                self.active_features[(game_id, your_id)] = active_features
+                self.models[(game_id, my_id)] = model
+                self.active_features[(game_id, my_id)] = active_features
 
     def choose_move(self, data):
         """
@@ -150,20 +150,20 @@ class Logic:
         # TODO: Explore new strategies for picking a move that are better than random
         if possible_moves:
             game_id = tools.get_game_id(data)
-            your_id = tools.get_your_id(data)
+            my_id = tools.get_my_id(data)
 
-            if (game_id, your_id) in self.models:
-                previous_features = self.active_features[(game_id, your_id)]
+            if (game_id, my_id) in self.models:
+                previous_features = self.active_features[(game_id, my_id)]
                 next_features = self._get_active_features(data)
                 removed_features, added_features = self._get_removed_and_added_features(
                     previous_features, next_features
                 )
 
-                model = self.models[(game_id, your_id)]
+                model = self.models[(game_id, my_id)]
                 model.update_accumulator(removed_features, added_features)
                 sorted_moves = model.forward().argsort()[::-1]
-                
-                self.active_features[(game_id, your_id)] = next_features
+
+                self.active_features[(game_id, my_id)] = next_features
 
                 for sorted_move in sorted_moves:
                     mapped_move = self.move_mapping[sorted_move]
@@ -217,14 +217,14 @@ class Logic:
 
         """
         game_id = tools.get_game_id(data)
-        your_id = tools.get_your_id(data)
+        my_id = tools.get_my_id(data)
 
-        if (game_id, your_id) in self.models:
-            model = self.models[(game_id, your_id)]
+        if (game_id, my_id) in self.models:
+            model = self.models[(game_id, my_id)]
             self.recycle_bin.append(model)
 
-            del self.models[(game_id, your_id)]
-            del self.active_features[(game_id, your_id)]
+            del self.models[(game_id, my_id)]
+            del self.active_features[(game_id, my_id)]
 
     def _avoid_my_neck(self, my_body, possible_moves):
         """
@@ -291,13 +291,13 @@ class Logic:
         return: The list of remaining possible_moves, with 'body' directions removed
         """
         my_head = my_body[0]  # The first body coordinate is always the head
-        body_set_except_tail = tools.get_body_set_except_tail(my_body)
+        my_body_except_tail = tools.get_my_body_except_tail(my_body)
         possible_move_set = tools.get_possible_move_set(possible_moves)
 
         adjacent_squares_and_moves = tools.get_adjacent_squares_and_moves(my_head)
 
         for adjacent_square, move in adjacent_squares_and_moves:
-            if adjacent_square in body_set_except_tail and move in possible_move_set:
+            if adjacent_square in my_body_except_tail and move in possible_move_set:
                 possible_moves.remove(move)
 
         return possible_moves
@@ -315,9 +315,9 @@ class Logic:
         """
         my_head = my_body[0]  # The first body coordinate is always the head
         other_body_set_except_squadmates_and_tails = (
-            tools.get_other_body_set_except_squadmates_and_tails(data)
+            tools.get_other_bodies_except_squadmates_and_tails(data)
         )
-        possible_move_set = {possible_move for possible_move in possible_moves}
+        possible_move_set = tools.get_possible_move_set(data)
 
         adjacent_squares_and_moves = tools.get_adjacent_squares_and_moves(my_head)
 
@@ -338,8 +338,8 @@ class Logic:
         """
         active_features = set()
 
-        your_id = tools.get_your_id(data)
-        your_squad = tools.get_your_squad(data)
+        my_id = tools.get_my_id(data)
+        my_squad = tools.get_my_squad(data)
         game_type = tools.get_game_type(data)
         board_size = tools.get_board_size(data)
         foods = tools.get_food(data)
@@ -355,9 +355,9 @@ class Logic:
             active_features.add(self.feature_mapping[active_feature])
 
         for snake in snakes:
-            if snake["id"] == your_id:
+            if snake["id"] == my_id:
                 player = "you"
-            elif game_type == "squad" and snake["squad"] == your_squad:
+            elif game_type == "squad" and snake["squad"] == my_squad:
                 player = "squad"
             else:
                 player = "snake"
