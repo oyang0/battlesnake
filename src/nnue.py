@@ -1,4 +1,4 @@
-import numpy as np
+from numpy import maximum
 
 """
 Battlesnake efficiently updatable neural network.
@@ -47,4 +47,4 @@ class NNUE:
         return self.l2_weight @ features + self.l2_bias
 
     def _relu(self, features):
-        return np.maximum(0, features)
+        return maximum(0, features)

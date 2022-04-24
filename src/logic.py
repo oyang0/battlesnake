@@ -1,9 +1,25 @@
-import random
+from random import choice
 
-from pickle import load
-from copy import deepcopy
+from copy import copy
 
-import tools
+from utils.game_state import GameState
+from utils.snake import Snake
+from utils.vector import Vector, up, down, left, right, noop, directions
+
+from logics.bad_moves import BadMoves
+from logics.chaise_tail import ChaiseTail
+from logics.eat import Eat
+from logics.kill import Kill
+from logics.orthogonal_distances import OrthogonalDistances
+from logics.path_distances import PathDistances
+from logics.increase_board_control import IncreaseBoardControl
+from logics.surround import Surround
+
+from src.floodfill import is_coords_open, calc_neighbors, calc_open_space
+from src.pathfinding import calc_possible_moves, calc_next_move
+from src.pathfinding import BattlesnakeAStarPathfinder
+from src.targeting import calc_targets
+from src.util import calc_manhattan_distance
 
 
 class Logic:
@@ -14,28 +30,14 @@ class Logic:
     from the list of possible moves!
     """
 
-    def __init__(self, model_file="src/model.pth", max_models=4):
-        with open(model_file, "rb") as model:
-            self.model = load(model)
+    def __init__(self, model):
+        self.model = model
 
         self.feature_mapping = self._get_feature_mapping()
         self.move_mapping = {0: "left", 1: "right", 2: "down", 3: "up"}
 
         self.models = {}
-        self.active_features = {}
-        self.recycle_bin = [self.model]
-
-        self.game_types = {
-            "constrictor",
-            "royale",
-            "solo",
-            "squad",
-            "standard",
-            "wrapped",
-        }
-        self.board_sizes = {7, 11, 19}
-
-        self.max_models = max_models
+        self.features = {}
 
     def get_info(self):
         """
@@ -65,32 +67,20 @@ class Logic:
         for each move of the game.
 
         """
-        game_type = tools.get_game_type(data)
-        board_size = tools.get_board_size(data)
+        len_snakes = len(data["board"]["snakes"])
+        board_size = data["board"]["height"]
+        game_type = data["game"]["ruleset"]["name"]
 
-        if game_type in self.game_types and board_size in self.board_sizes:
+        if len_snakes == 2 and board_size == 11 and game_type == "standard":
+            game_id = data["game"]["id"]
+            my_id = data["you"]["id"]
 
-            if self.recycle_bin():
-                game_id = tools.get_game_id(data)
-                my_id = tools.get_my_id(data)
+            model = copy(self.model)
+            active_features = self._get_active_features(data)
+            model.refresh_accumulator(active_features)
 
-                model = self.recycle_bin.pop()
-                active_features = self._get_active_features(data)
-                model.refresh_accumulator(active_features)
-
-                self.models[(game_id, my_id)] = model
-                self.active_features[(game_id, my_id)] = active_features
-
-            elif len(self.models) + len(self.recycle_bin) <= self.max_models:
-                game_id = tools.get_game_id(data)
-                my_id = tools.get_my_id(data)
-
-                model = deepcopy(self.model)
-                active_features = self._get_active_features(data)
-                model.refresh_accumulator(active_features)
-
-                self.models[(game_id, my_id)] = model
-                self.active_features[(game_id, my_id)] = active_features
+            self.models[(game_id, my_id)] = model
+            self.features[(game_id, my_id)] = active_features
 
     def choose_move(self, data):
         """
@@ -104,13 +94,9 @@ class Logic:
         for each move of the game.
 
         """
-        my_snake = data[
-            "you"
-        ]  # A dictionary describing your snake's position on the board
-        my_head = my_snake["head"]  # A dictionary of coordinates like {"x": 0, "y": 0}
-        my_body = my_snake[
-            "body"
-        ]  # A list of coordinate dictionaries like [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
+        # my_snake = data["you"]  # A dictionary describing your snake's position on the board
+        # my_head = my_snake["head"]  # A dictionary of coordinates like {"x": 0, "y": 0}
+        # my_body = my_snake["body"]  # A list of coordinate dictionaries like [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
 
         # Uncomment the lines below to see what this data looks like in your output!
         # print(f"~~~ Turn: {data['turn']}  Game Mode: {data['game']['ruleset']['name']} ~~~")
@@ -119,62 +105,56 @@ class Logic:
         # print(f"My Battlesnakes head this turn is: {my_head}")
         # print(f"My Battlesnakes body this turn is: {my_body}")
 
-        possible_moves = ["up", "down", "left", "right"]
+        # possible_moves = ["up", "down", "left", "right"]
 
         # Step 0: Don't allow your Battlesnake to move back on it's own neck.
-        possible_moves = self._avoid_my_neck(my_body, possible_moves)
+        # possible_moves = self._avoid_my_neck(my_body, possible_moves)
 
         # TODO: Step 1 - Don't hit walls.
         # Use information from `data` and `my_head` to not move beyond the game board.
-        board = data['board']
-        board_height = board['height']
-        board_width = board['width']
-        possible_moves = self._avoid_hitting_walls(
-            my_body, possible_moves, board_height, board_width, data
-        )
+        # board = data['board']
+        # board_height = board['height']
+        # board_width = board['width']
 
         # TODO: Step 2 - Don't hit yourself.
         # Use information from `my_body` to avoid moves that would collide with yourself.
-        possible_moves = self._avoid_hitting_myself(my_body, possible_moves)
 
         # TODO: Step 3 - Don't collide with others.
         # Use information from `data` to prevent your Battlesnake from colliding with others.
-        possible_moves = self._avoid_colliding_others(my_body, possible_moves, data)
+        possible_moves = calc_possible_moves(data)
 
         # TODO: Step 4 - Find food.
         # Use information in `data` to seek out and find food.
         # food = data['board']['food']
 
         # Choose a random direction from the remaining possible_moves to move in, and then return that move
-        # move = random.choice(possible_moves) if possible_moves else "up"
+        # move = choice(possible_moves) if possible_moves else "up"
         # TODO: Explore new strategies for picking a move that are better than random
-        if possible_moves:
-            game_id = tools.get_game_id(data)
-            my_id = tools.get_my_id(data)
+        game_id = data["game"]["id"]
+        my_id = data["you"]["id"]
 
-            if (game_id, my_id) in self.models:
-                previous_features = self.active_features[(game_id, my_id)]
-                next_features = self._get_active_features(data)
-                removed_features, added_features = self._get_removed_and_added_features(
-                    previous_features, next_features
-                )
+        if possible_moves and (game_id, my_id) in self.models:
+            previous_features = self.features[(game_id, my_id)]
+            next_features = self._get_active_features(data)
+            removed_features = self._get_removed_features(
+                previous_features, next_features
+            )
+            added_features = self._get_added_features(previous_features, next_features)
 
-                model = self.models[(game_id, my_id)]
-                model.update_accumulator(removed_features, added_features)
-                sorted_moves = model.forward().argsort()[::-1]
+            model = self.models[(game_id, my_id)]
+            model.update_accumulator(removed_features, added_features)
+            sorted_moves = model.forward().argsort()[::-1]
 
-                self.active_features[(game_id, my_id)] = next_features
+            self.features[(game_id, my_id)] = next_features
 
-                for sorted_move in sorted_moves:
-                    mapped_move = self.move_mapping[sorted_move]
+            for sorted_move in sorted_moves:
+                mapped_move = self.move_mapping[sorted_move]
 
-                    if mapped_move in possible_moves:
-                        move = mapped_move
-                        break
-            else:
-                move = random.choice(possible_moves)
+                if mapped_move in possible_moves:
+                    move = mapped_move
+                    break
         else:
-            move = "up"
+            move = choice(["up", "down", "left", "right"])
 
         print(
             f"{data['game']['id']} MOVE {data['turn']}: {move} picked from all valid options in {possible_moves}"
@@ -201,7 +181,7 @@ class Logic:
             "I'm not really sure...",
             f"I guess I'll go {move} then.",
         ]
-        shout = random.choice(shouts)
+        shout = choice(shouts)
         return shout
 
     def choose_end(self, data):
@@ -216,15 +196,12 @@ class Logic:
         for each move of the game.
 
         """
-        game_id = tools.get_game_id(data)
-        my_id = tools.get_my_id(data)
+        game_id = data["game"]["id"]
+        my_id = data["you"]["id"]
 
         if (game_id, my_id) in self.models:
-            model = self.models[(game_id, my_id)]
-            self.recycle_bin.append(model)
-
             del self.models[(game_id, my_id)]
-            del self.active_features[(game_id, my_id)]
+            del self.features[(game_id, my_id)]
 
     def _avoid_my_neck(self, my_body, possible_moves):
         """
@@ -248,221 +225,163 @@ class Logic:
 
         return possible_moves
 
-    def _avoid_hitting_walls(
-        self,
-        my_body,
-        possible_moves,
-        board_height,
-        board_width,
-        data,
-    ):
-        """
-        my_body: List of dictionaries of x/y coordinates for every segment of a Battlesnake.
-                e.g. [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
-        possible_moves: List of strings. Moves to pick from.
-                e.g. ["up", "down", "left", "right"]
-
-        return: The list of remaining possible_moves, with 'wall' directions removed
-        """
-        my_head = my_body[0]  # The first body coordinate is always the head
-
-        game_type = tools.get_game_type(data)
-
-        if game_type != "wrapped":
-            possible_move_set = tools.get_possible_move_set(possible_moves)
-            adjacent_squares_and_moves = tools.get_adjacent_squares_and_moves(my_head)
-
-            for adjacent_square, move in adjacent_squares_and_moves:
-                out_of_bounds = tools.is_out_of_bounds(
-                    adjacent_square, board_height, board_width
-                )
-                if out_of_bounds and move in possible_move_set:
-                    possible_moves.remove(move)
-
-        return possible_moves
-
-    def _avoid_hitting_myself(self, my_body, possible_moves):
-        """
-        my_body: List of dictionaries of x/y coordinates for every segment of a Battlesnake.
-                e.g. [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
-        possible_moves: List of strings. Moves to pick from.
-                e.g. ["up", "down", "left", "right"]
-
-        return: The list of remaining possible_moves, with 'body' directions removed
-        """
-        my_head = my_body[0]  # The first body coordinate is always the head
-        my_body_except_tail = tools.get_my_body_except_tail(my_body)
-        possible_move_set = tools.get_possible_move_set(possible_moves)
-
-        adjacent_squares_and_moves = tools.get_adjacent_squares_and_moves(my_head)
-
-        for adjacent_square, move in adjacent_squares_and_moves:
-            if adjacent_square in my_body_except_tail and move in possible_move_set:
-                possible_moves.remove(move)
-
-        return possible_moves
-
-    def _avoid_colliding_others(self, my_body, possible_moves, data):
-        """
-        my_body: List of dictionaries of x/y coordinates for every segment of a Battlesnake.
-                e.g. [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
-        possible_moves: List of strings. Moves to pick from.
-                e.g. ["up", "down", "left", "right"]
-        data: Dictionary of all Game Board data as received from the Battlesnake Engine.
-                For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
-
-        return: The list of remaining possible_moves, with 'others' directions removed
-        """
-        my_head = my_body[0]  # The first body coordinate is always the head
-        other_body_set_except_squadmates_and_tails = (
-            tools.get_other_bodies_except_squadmates_and_tails(data)
-        )
-        possible_move_set = tools.get_possible_move_set(data)
-
-        adjacent_squares_and_moves = tools.get_adjacent_squares_and_moves(my_head)
-
-        for adjacent_square, move in adjacent_squares_and_moves:
-            if (
-                adjacent_square in other_body_set_except_squadmates_and_tails
-                and move in possible_move_set
-            ):
-                possible_moves.remove(move)
-
-        return possible_moves
-
     def _get_active_features(self, data):
         """
         data: Dictionary of all Game Board data as received from the Battlesnake Engine.
                 For a full example of 'data', see https://docs.battlesnake.com/references/api/sample-move-request
         return: The list of active features
         """
+        my_id = data["you"]["id"]
+        foods = data["board"]["food"]
+        snakes = data["board"]["snakes"]
+
         active_features = set()
 
-        my_id = tools.get_my_id(data)
-        my_squad = tools.get_my_squad(data)
-        game_type = tools.get_game_type(data)
-        board_size = tools.get_board_size(data)
-        foods = tools.get_food(data)
-        hazards = tools.get_hazards(data)
-        snakes = tools.get_snakes(data)
-
         for food in foods:
-            active_feature = (game_type, board_size, food["x"], food["y"], "food")
-            active_features.add(self.feature_mapping[active_feature])
-
-        for hazard in hazards:
-            active_feature = (game_type, board_size, hazard["x"], hazard["y"], "hazard")
-            active_features.add(self.feature_mapping[active_feature])
+            square = (food["x"], food["y"])
+            active_features.add(self.feature_mapping[(square, "food")])
 
         for snake in snakes:
-            if snake["id"] == my_id:
-                player = "you"
-            elif game_type == "squad" and snake["squad"] == my_squad:
-                player = "squad"
-            else:
-                player = "snake"
+            color = "you" if snake["id"] == my_id else "snake"
+            health = ("health", snake["health"])
+            length = ("length", snake["length"])
 
             head = snake["head"]
-            x = head["x"]
-            y = head["y"]
-            health = snake["health"]
-            active_feature = (game_type, board_size, x, y, player, health)
-            active_features.add(self.feature_mapping[active_feature])
+            square = (head["x"], head["y"])
+            active_features.add(self.feature_mapping[(square, health)])
+            active_features.add(self.feature_mapping[(square, "head")])
+            active_features.add(self.feature_mapping[(square, length)])
+            active_features.add(self.feature_mapping[(square, color)])
 
-            for previous_body, body in zip(snake["body"][:-1], snake["body"][1:]):
-                previous_x = previous_body["x"]
-                previous_y = previous_body["y"]
-                x = body["x"]
-                y = body["y"]
+            for body in snake["body"][1:]:
+                square = (body["x"], body["y"])
+                active_features.add(self.feature_mapping[(square, health)])
+                active_features.add(self.feature_mapping[(square, "body")])
+                active_features.add(self.feature_mapping[(square, length)])
+                active_features.add(self.feature_mapping[(square, color)])
 
-                if previous_x < x:
-                    active_feature = (game_type, board_size, x, y, player, "left")
-                elif previous_x > x:
-                    active_feature = (game_type, board_size, x, y, player, "right")
-                elif previous_y < y:
-                    active_feature = (game_type, board_size, x, y, player, "down")
-                elif previous_y > y:
-                    active_feature = (game_type, board_size, x, y, player, "up")
+            for previous_body, body, next_body in zip(
+                snake["body"][:-2], snake["body"][1:-1], snake["body"][2:]
+            ):
+                square = (body["x"], body["y"])
+
+                if previous_body["x"] < body["x"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("previous", "left"))]
+                    )
+                elif previous_body["x"] > body["x"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("previous", "right"))]
+                    )
+                elif previous_body["y"] < body["y"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("previous", "down"))]
+                    )
+                elif previous_body["y"] > body["y"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("previous", "up"))]
+                    )
                 else:
-                    active_feature = (game_type, board_size, x, y, player, "bottom")
+                    active_features.add(
+                        self.feature_mapping[(square, ("previous", "noop"))]
+                    )
 
-                active_features.add(self.feature_mapping[active_feature])
+                if next_body["x"] < body["x"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("next", "left"))]
+                    )
+                elif next_body["x"] > body["x"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("next", "right"))]
+                    )
+                elif next_body["y"] < body["y"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("next", "down"))]
+                    )
+                elif next_body["y"] > body["y"]:
+                    active_features.add(self.feature_mapping[(square, ("next", "up"))])
+                else:
+                    active_features.add(
+                        self.feature_mapping[(square, ("next", "noop"))]
+                    )
 
         active_features = tuple(active_features)
 
         return active_features
 
-    def _get_removed_and_added_features(self, previous_features, next_features):
+    def _get_removed_features(self, previous_features, next_features):
         """
         previous_features: List of previous features.
                 e.g. [0, 10, 20]
         next_features: List of next features.
                 e.g. [0, 10, 20]
-        return: The list of removed features and the list of added features
+        return: The list of removed features
         """
-        previous_feature_set = {
-            previous_feature for previous_feature in previous_features
-        }
-        next_feature_set = {active_feature for active_feature in next_features}
-
         removed_features = [
             previous_feature
             for previous_feature in previous_features
-            if previous_feature not in next_feature_set
+            if previous_feature not in next_features
         ]
+
+        return removed_features
+
+    def _get_added_features(self, previous_features, next_features):
+        """
+        previous_features: List of previous features.
+                e.g. [0, 10, 20]
+        next_features: List of next features.
+                e.g. [0, 10, 20]
+        return: The list of added features
+        """
         added_features = [
             active_feature
             for active_feature in next_features
-            if active_feature not in previous_feature_set
+            if active_feature not in previous_features
         ]
 
-        return removed_features, added_features
+        return added_features
 
     def _get_feature_mapping(self):
         """
         return: The dictionary of mapping features to indices
         """
-        game_types = ["constrictor", "royale", "solo", "squad", "standard", "wrapped"]
-        board_sizes = [7, 11, 19]
-        players = ["you", "squad", "snake", "food", "hazard"]
-        players_ = {"you", "squad", "snake"}
-        pieces = ["left", "right", "down", "up", "bottom", "head"]
-        pieces_ = {"head"}
-        healths = range(1, 101)
+        healths = range(1, 100 + 1)
+        piece_types = ["body", "head"]
+        lengths = range(3, 11 * 11 + 1)
+        directions = ["up", "down", "left", "right", "noop"]
+        colors = ["you", "snake"]
 
         feature_mapping = {}
         index = 0
-        for game_type in game_types:
-            for board_size in board_sizes:
-                for x in range(board_size):
-                    for y in range(board_size):
-                        for player in players:
-                            if player in players_:
-                                for piece in pieces:
-                                    if piece in pieces_:
-                                        for health in healths:
-                                            feature_mapping[
-                                                (
-                                                    game_type,
-                                                    board_size,
-                                                    x,
-                                                    y,
-                                                    player,
-                                                    piece,
-                                                    health,
-                                                )
-                                            ] = index
-                                            index += 1
-                                    else:
-                                        feature_mapping[
-                                            (game_type, board_size, x, y, player, piece)
-                                        ] = index
-                                        index += 1
-                            else:
-                                feature_mapping[
-                                    (game_type, board_size, x, y, player)
-                                ] = index
-                                index += 1
+        for x in range(11):
+            for y in range(11):
+
+                for health in healths:
+                    feature_mapping[((x, y), ("health", health))] = index
+                    index += 1
+
+                for piece_type in piece_types:
+                    feature_mapping[((x, y), piece_type)] = index
+                    index += 1
+
+                for length in lengths:
+                    feature_mapping[((x, y), ("length", length))] = index
+                    index += 1
+
+                for direction in directions:
+                    feature_mapping[((x, y), ("next", direction))] = index
+                    index += 1
+
+                for direction in directions:
+                    feature_mapping[((x, y), ("previous", direction))] = index
+                    index += 1
+
+                for color in colors:
+                    feature_mapping[((x, y), color)] = index
+                    index += 1
+
+                feature_mapping[((x, y), "food")] = index
+                index += 1
 
         return feature_mapping
 

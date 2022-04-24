@@ -1,8 +1,10 @@
-import logging
-import os
+from logging import getLogger, ERROR
+from os import environ
 
 from flask import Flask
 from flask import request
+
+from pickle import load
 
 from nnue import NNUE
 from logic import Logic
@@ -29,7 +31,7 @@ def handle_start():
     request.json contains information about the game that's about to be played.
     """
     data = request.get_json()
-    
+
     logic.choose_start(data)
 
     print(f"{data['game']['id']} START")
@@ -58,7 +60,7 @@ def handle_end():
     It's purely for informational purposes, you don't have to make any decisions here.
     """
     data = request.get_json()
-    
+
     logic.choose_end(data)
 
     print(f"{data['game']['id']} END")
@@ -72,12 +74,15 @@ def identify_server(response):
 
 
 if __name__ == "__main__":
-    logic = Logic(model_file="src/model.pth", max_models=4)
-    
-    logging.getLogger("werkzeug").setLevel(logging.ERROR)
+    with open("src/model.pth", "rb") as model:
+        model = load(model)
+
+    logic = Logic(model)
+
+    getLogger("werkzeug").setLevel(ERROR)
 
     host = "0.0.0.0"
-    port = int(os.environ.get("PORT", "8080"))
+    port = int(environ.get("PORT", "8080"))
 
     print(f"\nRunning Battlesnake server at http://{host}:{port}")
     app.env = 'development'
