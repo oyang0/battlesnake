@@ -130,29 +130,33 @@ class Logic:
         # Choose a random direction from the remaining possible_moves to move in, and then return that move
         # move = choice(possible_moves) if possible_moves else "up"
         # TODO: Explore new strategies for picking a move that are better than random
-        game_id = data["game"]["id"]
-        my_id = data["you"]["id"]
 
-        if possible_moves and (game_id, my_id) in self.models:
-            previous_features = self.features[(game_id, my_id)]
-            next_features = self._get_active_features(data)
-            removed_features = self._get_removed_features(
-                previous_features, next_features
-            )
-            added_features = self._get_added_features(previous_features, next_features)
-
-            model = self.models[(game_id, my_id)]
-            model.update_accumulator(removed_features, added_features)
-            sorted_moves = model.forward().argsort()[::-1]
-
-            self.features[(game_id, my_id)] = next_features
-
-            for sorted_move in sorted_moves:
-                mapped_move = self.move_mapping[sorted_move]
-
-                if mapped_move in possible_moves:
-                    move = mapped_move
-                    break
+        if possible_moves:
+            game_id = data["game"]["id"]
+            my_id = data["you"]["id"]
+            
+            if (game_id, my_id) in self.models:
+                previous_features = self.features[(game_id, my_id)]
+                next_features = self._get_active_features(data)
+                removed_features = self._get_removed_features(
+                    previous_features, next_features
+                )
+                added_features = self._get_added_features(previous_features, next_features)
+    
+                model = self.models[(game_id, my_id)]
+                model.update_accumulator(removed_features, added_features)
+                sorted_moves = model.forward().argsort()[::-1]
+    
+                self.features[(game_id, my_id)] = next_features
+    
+                for sorted_move in sorted_moves:
+                    mapped_move = self.move_mapping[sorted_move]
+    
+                    if mapped_move in possible_moves:
+                        move = mapped_move
+                        break
+            else:
+                move = choice(possible_moves)
         else:
             move = choice(["up", "down", "left", "right"])
 
