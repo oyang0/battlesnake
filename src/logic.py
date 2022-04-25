@@ -94,8 +94,10 @@ class Logic:
         for each move of the game.
 
         """
-        # my_snake = data["you"]  # A dictionary describing your snake's position on the board
-        # my_head = my_snake["head"]  # A dictionary of coordinates like {"x": 0, "y": 0}
+        my_snake = data[
+            "you"
+        ]  # A dictionary describing your snake's position on the board
+        my_head = my_snake["head"]  # A dictionary of coordinates like {"x": 0, "y": 0}
         # my_body = my_snake["body"]  # A list of coordinate dictionaries like [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
 
         # Uncomment the lines below to see what this data looks like in your output!
@@ -130,33 +132,52 @@ class Logic:
         # Choose a random direction from the remaining possible_moves to move in, and then return that move
         # move = choice(possible_moves) if possible_moves else "up"
         # TODO: Explore new strategies for picking a move that are better than random
+        neighbors = calc_neighbors(my_head)
+        moves = ["up", "down", "left", "right"]
+        board = data["board"]
+        greatest_open_space = float("-inf")
+        greatest_moves = []
+        for neighbor, move in zip(neighbors, moves):
+            if move in possible_moves:
+                open_space = calc_open_space(board, neighbor)
+                if open_space > greatest_open_space:
+                    greatest_open_space = open_space
+                    greatest_moves = [move]
+                elif open_space == greatest_open_space:
+                    greatest_moves.append(move)
+        possible_moves = greatest_moves
 
         if possible_moves:
-            game_id = data["game"]["id"]
-            my_id = data["you"]["id"]
-            
-            if (game_id, my_id) in self.models:
-                previous_features = self.features[(game_id, my_id)]
-                next_features = self._get_active_features(data)
-                removed_features = self._get_removed_features(
-                    previous_features, next_features
-                )
-                added_features = self._get_added_features(previous_features, next_features)
-    
-                model = self.models[(game_id, my_id)]
-                model.update_accumulator(removed_features, added_features)
-                sorted_moves = model.forward().argsort()[::-1]
-    
-                self.features[(game_id, my_id)] = next_features
-    
-                for sorted_move in sorted_moves:
-                    mapped_move = self.move_mapping[sorted_move]
-    
-                    if mapped_move in possible_moves:
-                        move = mapped_move
-                        break
+            if len(possible_moves) > 1:
+                game_id = data["game"]["id"]
+                my_id = data["you"]["id"]
+
+                if (game_id, my_id) in self.models:
+                    previous_features = self.features[(game_id, my_id)]
+                    next_features = self._get_active_features(data)
+                    removed_features = self._get_removed_features(
+                        previous_features, next_features
+                    )
+                    added_features = self._get_added_features(
+                        previous_features, next_features
+                    )
+
+                    model = self.models[(game_id, my_id)]
+                    model.update_accumulator(removed_features, added_features)
+                    sorted_moves = model.forward().argsort()[::-1]
+
+                    self.features[(game_id, my_id)] = next_features
+
+                    for sorted_move in sorted_moves:
+                        mapped_move = self.move_mapping[sorted_move]
+
+                        if mapped_move in possible_moves:
+                            move = mapped_move
+                            break
+                else:
+                    move = choice(possible_moves)
             else:
-                move = choice(possible_moves)
+                move = possible_moves[0]
         else:
             move = choice(["up", "down", "left", "right"])
 
