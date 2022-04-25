@@ -132,14 +132,22 @@ class Logic:
         # Choose a random direction from the remaining possible_moves to move in, and then return that move
         # move = choice(possible_moves) if possible_moves else "up"
         # TODO: Explore new strategies for picking a move that are better than random
-        neighbors = calc_neighbors(my_head)
-        moves = ["up", "down", "left", "right"]
+        my_neighbors = calc_neighbors(my_head)
+        moves = ["up", "down", "right", "left"]
+        snakes = data["board"]["snakes"]
+        for snake in snakes:
+            head = snake["head"]
+            neighbors = calc_neighbors(head)
+            for my_neighbor, move in zip(my_neighbors, moves):
+                if my_neighbor in neighbors and move in possible_moves:
+                    possible_moves.remove(move)
+        
         board = data["board"]
         greatest_open_space = float("-inf")
         greatest_moves = []
-        for neighbor, move in zip(neighbors, moves):
+        for my_neighbor, move in zip(my_neighbors, moves):
             if move in possible_moves:
-                open_space = calc_open_space(board, neighbor)
+                open_space = calc_open_space(board, my_neighbor)
                 if open_space > greatest_open_space:
                     greatest_open_space = open_space
                     greatest_moves = [move]
