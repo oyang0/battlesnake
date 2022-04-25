@@ -2,10 +2,6 @@ from random import choice
 
 from copy import copy
 
-from utils.game_state import GameState
-from utils.snake import Snake
-from utils.vector import Vector, up, down, left, right, noop, directions
-
 from logics.bad_moves import BadMoves
 from logics.chaise_tail import ChaiseTail
 from logics.eat import Eat
@@ -14,6 +10,10 @@ from logics.orthogonal_distances import OrthogonalDistances
 from logics.path_distances import PathDistances
 from logics.increase_board_control import IncreaseBoardControl
 from logics.surround import Surround
+
+from utils.game_state import GameState
+from utils.snake import Snake
+from utils.vector import Vector, up, down, left, right, noop, directions
 
 from src.floodfill import is_coords_open, calc_neighbors, calc_open_space
 from src.pathfinding import calc_possible_moves, calc_next_move
@@ -94,9 +94,7 @@ class Logic:
         for each move of the game.
 
         """
-        my_snake = data[
-            "you"
-        ]  # A dictionary describing your snake's position on the board
+        my_snake = data["you"]  # A dictionary describing your snake's position on the board
         my_head = my_snake["head"]  # A dictionary of coordinates like {"x": 0, "y": 0}
         # my_body = my_snake["body"]  # A list of coordinate dictionaries like [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
 
@@ -107,7 +105,7 @@ class Logic:
         # print(f"My Battlesnakes head this turn is: {my_head}")
         # print(f"My Battlesnakes body this turn is: {my_body}")
 
-        # possible_moves = ["up", "down", "left", "right"]
+        possible_moves = ["up", "down", "left", "right"]
 
         # Step 0: Don't allow your Battlesnake to move back on it's own neck.
         # possible_moves = self._avoid_my_neck(my_body, possible_moves)
@@ -123,7 +121,19 @@ class Logic:
 
         # TODO: Step 3 - Don't collide with others.
         # Use information from `data` to prevent your Battlesnake from colliding with others.
-        possible_moves = calc_possible_moves(data)
+        game_state = GameState(data)
+        bad_moves = BadMoves()
+        possible_moves = [
+            possible_move
+            for possible_move, direction in zip(possible_moves, directions)
+            if not bad_moves.bad_move(direction, game_state)
+        ]
+
+        possible_moves = [
+            possible_move
+            for possible_move in calc_possible_moves(data)
+            if possible_move in possible_moves
+        ]
 
         # TODO: Step 4 - Find food.
         # Use information in `data` to seek out and find food.
@@ -132,29 +142,18 @@ class Logic:
         # Choose a random direction from the remaining possible_moves to move in, and then return that move
         # move = choice(possible_moves) if possible_moves else "up"
         # TODO: Explore new strategies for picking a move that are better than random
-        my_neighbors = calc_neighbors(my_head)
-        my_moves = ["up", "down", "right", "left"]
-        my_id = data["you"]["id"]
-        snakes = data["board"]["snakes"]
-        for snake in snakes:
-            id_ = snake["id"]
-            if id_ != my_id:
-                head = snake["head"]
-                neighbors = calc_neighbors(head)
-                for my_neighbor, my_move in zip(my_neighbors, my_moves):
-                    if my_neighbor in neighbors and my_move in possible_moves:
-                        possible_moves.remove(my_move)
-
+        neighbors = calc_neighbors(my_head)
+        moves = ["up", "down", "right", "left"]
         greatest_open_space = 0
         greatest_moves = []
-        for my_neighbor, my_move in zip(my_neighbors, my_moves):
-            if my_move in possible_moves:
-                open_space = calc_open_space(board, my_neighbor)
+        for neighbor, move in zip(neighbors, moves):
+            if move in possible_moves:
+                open_space = calc_open_space(board, neighbor)
                 if open_space > greatest_open_space:
                     greatest_open_space = open_space
-                    greatest_moves = [my_move]
+                    greatest_moves = [move]
                 elif open_space == greatest_open_space:
-                    greatest_moves.append(my_move)
+                    greatest_moves.append(move)
         possible_moves = greatest_moves
 
         if possible_moves:
