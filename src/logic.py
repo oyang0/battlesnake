@@ -114,7 +114,7 @@ class Logic:
 
         # TODO: Step 1 - Don't hit walls.
         # Use information from `data` and `my_head` to not move beyond the game board.
-        # board = data['board']
+        board = data['board']
         # board_height = board['height']
         # board_width = board['width']
 
@@ -133,26 +133,28 @@ class Logic:
         # move = choice(possible_moves) if possible_moves else "up"
         # TODO: Explore new strategies for picking a move that are better than random
         my_neighbors = calc_neighbors(my_head)
-        moves = ["up", "down", "right", "left"]
+        my_moves = ["up", "down", "right", "left"]
+        my_id = data["you"]["id"]
         snakes = data["board"]["snakes"]
         for snake in snakes:
-            head = snake["head"]
-            neighbors = calc_neighbors(head)
-            for my_neighbor, move in zip(my_neighbors, moves):
-                if my_neighbor in neighbors and move in possible_moves:
-                    possible_moves.remove(move)
-        
-        board = data["board"]
-        greatest_open_space = float("-inf")
+            id_ = snake["id"]
+            if id_ != my_id:
+                head = snake["head"]
+                neighbors = calc_neighbors(head)
+                for my_neighbor, my_move in zip(my_neighbors, my_moves):
+                    if my_neighbor in neighbors and my_move in possible_moves:
+                        possible_moves.remove(my_move)
+
+        greatest_open_space = 0
         greatest_moves = []
-        for my_neighbor, move in zip(my_neighbors, moves):
-            if move in possible_moves:
+        for my_neighbor, my_move in zip(my_neighbors, my_moves):
+            if my_move in possible_moves:
                 open_space = calc_open_space(board, my_neighbor)
                 if open_space > greatest_open_space:
                     greatest_open_space = open_space
-                    greatest_moves = [move]
+                    greatest_moves = [my_move]
                 elif open_space == greatest_open_space:
-                    greatest_moves.append(move)
+                    greatest_moves.append(my_move)
         possible_moves = greatest_moves
 
         if possible_moves:
