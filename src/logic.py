@@ -33,11 +33,11 @@ class Logic:
     def __init__(self, model):
         self.model = model
 
-        self.feature_mapping = self._get_feature_mapping()
-        self.move_mapping = {0: "left", 1: "right", 2: "down", 3: "up"}
-
         self.models = {}
         self.features = {}
+
+        self.feature_mapping = self._get_feature_mapping()
+        self.move_mapping = {0: "left", 1: "right", 2: "down", 3: "up"}
 
     def get_info(self):
         """
@@ -94,8 +94,8 @@ class Logic:
         for each move of the game.
 
         """
-        # my_snake = data["you"]  # A dictionary describing your snake's position on the board
-        # my_head = my_snake["head"]  # A dictionary of coordinates like {"x": 0, "y": 0}
+        my_snake = data["you"]  # A dictionary describing your snake's position on the board
+        my_head = my_snake["head"]  # A dictionary of coordinates like {"x": 0, "y": 0}
         # my_body = my_snake["body"]  # A list of coordinate dictionaries like [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
 
         # Uncomment the lines below to see what this data looks like in your output!
@@ -112,7 +112,7 @@ class Logic:
 
         # TODO: Step 1 - Don't hit walls.
         # Use information from `data` and `my_head` to not move beyond the game board.
-        # board = data['board']
+        board = data['board']
         # board_height = board['height']
         # board_width = board['width']
 
@@ -130,39 +130,50 @@ class Logic:
         # Choose a random direction from the remaining possible_moves to move in, and then return that move
         # move = choice(possible_moves) if possible_moves else "up"
         # TODO: Explore new strategies for picking a move that are better than random
-        if possible_moves:
-            if len(possible_moves) > 1:
-                game_id = data["game"]["id"]
-                my_id = data["you"]["id"]
 
-                if (game_id, my_id) in self.models:
-                    previous_features = self.features[(game_id, my_id)]
-                    next_features = self._get_active_features(data)
-                    removed_features = self._get_removed_features(
-                        previous_features, next_features
-                    )
-                    added_features = self._get_added_features(
-                        previous_features, next_features
-                    )
+        # Flood fill - Don't limit open space.
+        greatest_open_space = 0
+        greatest_moves = []
 
-                    model = self.models[(game_id, my_id)]
-                    model.update_accumulator(removed_features, added_features)
-                    sorted_moves = model.forward().argsort()[::-1]
+        my_neighbors = calc_neighbors(my_head)
+        my_moves = ["up", "down", "right", "left"]
 
-                    self.features[(game_id, my_id)] = next_features
+        for my_neighbor, my_move in zip(my_neighbors, my_moves):
+            if my_move in possible_moves:
+                open_space = calc_open_space(board, my_neighbor)
+                if open_space > greatest_open_space:
+                    greatest_open_space = open_space
+                    greatest_moves = [my_move]
+                elif open_space == greatest_open_space:
+                    greatest_moves.append(my_move)
 
-                    for sorted_move in sorted_moves:
-                        mapped_move = self.move_mapping[sorted_move]
+        # NNUE - Choose an intelligent direction from the greatest_moves to move in, and then return that move.
+        if len(greatest_moves) > 1:
+            game_id = data["game"]["id"]
+            my_id = data["you"]["id"]
 
-                        if mapped_move in possible_moves:
-                            move = mapped_move
-                            break
-                else:
-                    move = choice(possible_moves)
+            if (game_id, my_id) in self.models:
+                prev = self.features[(game_id, my_id)]
+                next_ = self._get_active_features(data)
+                removed_features = self._get_removed_features(prev, next_)
+                added_features = self._get_added_features(prev, next_)
+
+                model = self.models[(game_id, my_id)]
+                model.update_accumulator(removed_features, added_features)
+                sorted_moves = model.forward().argsort()[::-1]
+
+                self.features[(game_id, my_id)] = next_
+
+                for sorted_move in sorted_moves:
+                    mapped_move = self.move_mapping[sorted_move]
+
+                    if mapped_move in greatest_moves:
+                        move = mapped_move
+                        break
             else:
-                move = possible_moves[0]
+                move = choice(greatest_moves)
         else:
-            move = choice(["up", "down", "left", "right"])
+            move = greatest_moves[0]
 
         print(
             f"{data['game']['id']} MOVE {data['turn']}: {move} picked from all valid options in {possible_moves}"
@@ -268,50 +279,38 @@ class Logic:
                 active_features.add(self.feature_mapping[(square, length)])
                 active_features.add(self.feature_mapping[(square, color)])
 
-            for previous_body, body, next_body in zip(
-                snake["body"][:-2], snake["body"][1:-1], snake["body"][2:]
-            ):
+            for body, next_body in zip(snake["body"][:-1], snake["body"][1:]):
                 square = (body["x"], body["y"])
 
-                if previous_body["x"] < body["x"]:
-                    active_features.add(
-                        self.feature_mapping[(square, ("previous", "left"))]
-                    )
-                elif previous_body["x"] > body["x"]:
-                    active_features.add(
-                        self.feature_mapping[(square, ("previous", "right"))]
-                    )
-                elif previous_body["y"] < body["y"]:
-                    active_features.add(
-                        self.feature_mapping[(square, ("previous", "down"))]
-                    )
-                elif previous_body["y"] > body["y"]:
-                    active_features.add(
-                        self.feature_mapping[(square, ("previous", "up"))]
-                    )
-                else:
-                    active_features.add(
-                        self.feature_mapping[(square, ("previous", "noop"))]
-                    )
-
                 if next_body["x"] < body["x"]:
-                    active_features.add(
-                        self.feature_mapping[(square, ("next", "left"))]
-                    )
+                    active_feature = self.feature_mapping[(square, ("next", "left"))]
                 elif next_body["x"] > body["x"]:
-                    active_features.add(
-                        self.feature_mapping[(square, ("next", "right"))]
-                    )
+                    active_feature = self.feature_mapping[(square, ("next", "right"))]
                 elif next_body["y"] < body["y"]:
-                    active_features.add(
-                        self.feature_mapping[(square, ("next", "down"))]
-                    )
+                    active_feature = self.feature_mapping[(square, ("next", "down"))]
                 elif next_body["y"] > body["y"]:
-                    active_features.add(self.feature_mapping[(square, ("next", "up"))])
+                    active_feature = self.feature_mapping[(square, ("next", "up"))]
                 else:
-                    active_features.add(
-                        self.feature_mapping[(square, ("next", "noop"))]
-                    )
+                    active_feature = self.feature_mapping[(square, ("next", "noop"))]
+
+                active_features.add(active_feature)
+
+            for previous_body, body in zip(snake["body"][:-1], snake["body"][1:]):
+                square = (body["x"], body["y"])
+                previous = "previous"
+
+                if previous_body["x"] < body["x"]:
+                    active_feature = self.feature_mapping[(square, (previous, "left"))]
+                elif previous_body["x"] > body["x"]:
+                    active_feature = self.feature_mapping[(square, (previous, "right"))]
+                elif previous_body["y"] < body["y"]:
+                    active_feature = self.feature_mapping[(square, (previous, "down"))]
+                elif previous_body["y"] > body["y"]:
+                    active_feature = self.feature_mapping[(square, (previous, "up"))]
+                else:
+                    active_feature = self.feature_mapping[(square, (previous, "noop"))]
+
+                active_features.add(active_feature)
 
         active_features = tuple(active_features)
 
