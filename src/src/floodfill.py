@@ -9,7 +9,7 @@ def is_coords_open(board, coords):
         return False
 
     for snake in board["snakes"]:
-        for snake_coords in snake["body"]:
+        for snake_coords in snake["body"][:-1]:
             if snake_coords == coords:
                 return False
 
