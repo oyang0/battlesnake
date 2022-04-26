@@ -157,16 +157,19 @@ class Logic:
         my_id = data["you"]["id"]
 
         if (game_id, my_id) in self.models:
-            prev = self.features[(game_id, my_id)]
-            next_ = self._get_active_features(data)
-            removed_features = self._get_removed_features(prev, next_)
-            added_features = self._get_added_features(prev, next_)
+            previous_features = self.features[(game_id, my_id)]
+            next_features = self._get_active_features(data)
+            removed_features = self._get_removed_features(
+                previous_features, next_features
+            )
+            added_features = self._get_added_features(previous_features, next_features)
 
             model = self.models[(game_id, my_id)]
             model.update_accumulator(removed_features, added_features)
+            print(model.forward())
             sorted_moves = model.forward().argsort()[::-1]
 
-            self.features[(game_id, my_id)] = next_
+            self.features[(game_id, my_id)] = next_features
 
             for sorted_move in sorted_moves:
                 mapped_move = self.move_mapping[sorted_move]
@@ -177,9 +180,9 @@ class Logic:
         else:
             move = choice(greatest_moves)
 
-        print(
-            f"{data['game']['id']} MOVE {data['turn']}: {move} picked from all valid options in {possible_moves}"
-        )
+        #print(
+        #    f"{data['game']['id']} MOVE {data['turn']}: {move} picked from all valid options in {possible_moves}"
+        #)
 
         return move
 
