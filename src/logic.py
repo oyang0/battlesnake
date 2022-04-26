@@ -305,6 +305,7 @@ class Logic:
                     active_features.add(
                         self.feature_mapping[(square, ("previous", "noop"))]
                     )
+
                 if next_body["x"] < body["x"]:
                     active_features.add(
                         self.feature_mapping[(square, ("next", "left"))]
@@ -325,7 +326,6 @@ class Logic:
                     )
 
         active_features = tuple(active_features)
-
         return active_features
 
     def _get_removed_features(self, previous_features, next_features):
@@ -372,6 +372,7 @@ class Logic:
 
         feature_mapping = {}
         index = 0
+
         for x in range(11):
             for y in range(11):
 
