@@ -133,56 +133,60 @@ class Logic:
         # move = choice(possible_moves) if possible_moves else "up"
         # TODO: Explore new strategies for picking a move that are better than random
 
-        # Flood fill - Don't limit open space.
-        greatest_open_space = 0
-        greatest_moves = []
-
-        my_neighbors = calc_neighbors(my_head)
-        my_moves = ["up", "down", "right", "left"]
-
-        for my_neighbor, my_move in zip(my_neighbors, my_moves):
-            if my_move in possible_moves:
-                open_space = calc_open_space(board, my_neighbor)
-                if open_space > greatest_open_space:
-                    greatest_open_space = open_space
-                    greatest_moves = [my_move]
-                elif open_space == greatest_open_space:
-                    greatest_moves.append(my_move)
-
-        if not greatest_moves:
-            greatest_moves = ["up", "down", "left", "right"]
-
-        # NNUE - Choose an intelligent direction from the greatest_moves to move in, and then return that move.
-        game_id = data["game"]["id"]
-        my_id = data["you"]["id"]
-
-        if (game_id, my_id) in self.models:
-            previous_features = self.features[(game_id, my_id)]
-            next_features = self._get_active_features(data)
-            removed_features = self._get_removed_features(
-                previous_features, next_features
-            )
-            added_features = self._get_added_features(previous_features, next_features)
-
-            model = self.models[(game_id, my_id)]
-            model.update_accumulator(removed_features, added_features)
-            print(model.forward())
-            sorted_moves = model.forward().argsort()[::-1]
-
-            self.features[(game_id, my_id)] = next_features
-
-            for sorted_move in sorted_moves:
-                mapped_move = self.move_mapping[sorted_move]
-
-                if mapped_move in greatest_moves:
-                    move = mapped_move
-                    break
+        if possible_moves:
+            
+            # Flood fill - Don't limit open space.
+            greatest_open_space = 0
+            greatest_moves = []
+    
+            my_neighbors = calc_neighbors(my_head)
+            my_moves = ["up", "down", "right", "left"]
+    
+            for my_neighbor, my_move in zip(my_neighbors, my_moves):
+                if my_move in possible_moves:
+                    open_space = calc_open_space(board, my_neighbor)
+                    if open_space > greatest_open_space:
+                        greatest_open_space = open_space
+                        greatest_moves = [my_move]
+                    elif open_space == greatest_open_space:
+                        greatest_moves.append(my_move)
+            
+            if len(greatest_moves) > 1:
+                
+                # NNUE - Choose an intelligent direction from the greatest_moves to move in, and then return that move.
+                game_id = data["game"]["id"]
+                my_id = my_snake["id"]
+        
+                if (game_id, my_id) in self.models:
+                    previous_features = self.features[(game_id, my_id)]
+                    next_features = self._get_active_features(data)
+                    removed_features = self._get_removed_features(
+                        previous_features, next_features
+                    )
+                    added_features = self._get_added_features(previous_features, next_features)
+        
+                    model = self.models[(game_id, my_id)]
+                    model.update_accumulator(removed_features, added_features)
+                    sorted_moves = model.forward().argsort()[::-1]
+        
+                    self.features[(game_id, my_id)] = next_features
+        
+                    for sorted_move in sorted_moves:
+                        mapped_move = self.move_mapping[sorted_move]
+        
+                        if mapped_move in greatest_moves:
+                            move = mapped_move
+                            break
+                else:
+                    move = choice(greatest_moves)
+            else:
+                move = greatest_moves[0]
         else:
-            move = choice(greatest_moves)
+            move = choice(["up", "down", "left", "right"])
 
-        #print(
-        #    f"{data['game']['id']} MOVE {data['turn']}: {move} picked from all valid options in {possible_moves}"
-        #)
+        print(
+            f"{data['game']['id']} MOVE {data['turn']}: {move} picked from all valid options in {possible_moves}"
+        )
 
         return move
 
@@ -288,6 +292,7 @@ class Logic:
                 snake["body"][:-2], snake["body"][1:-1], snake["body"][2:]
             ):
                 square = (body["x"], body["y"])
+                
                 if previous_body["x"] < body["x"]:
                     active_features.add(
                         self.feature_mapping[(square, ("previous", "left"))]
