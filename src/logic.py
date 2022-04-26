@@ -268,7 +268,7 @@ class Logic:
             active_features.add(self.feature_mapping[(square, "food")])
 
         for snake in snakes:
-            color = "you" if snake["id"] == my_id else "snake"
+            player = "you" if snake["id"] == my_id else "snake"
             health = ("health", snake["health"])
             length = ("length", snake["length"])
 
@@ -277,45 +277,28 @@ class Logic:
             active_features.add(self.feature_mapping[(square, health)])
             active_features.add(self.feature_mapping[(square, "head")])
             active_features.add(self.feature_mapping[(square, length)])
-            active_features.add(self.feature_mapping[(square, color)])
+            active_features.add(self.feature_mapping[(square, player)])
 
             for body in snake["body"][1:]:
                 square = (body["x"], body["y"])
                 active_features.add(self.feature_mapping[(square, health)])
                 active_features.add(self.feature_mapping[(square, "body")])
                 active_features.add(self.feature_mapping[(square, length)])
-                active_features.add(self.feature_mapping[(square, color)])
+                active_features.add(self.feature_mapping[(square, player)])
 
             for body, next_body in zip(snake["body"][:-1], snake["body"][1:]):
                 square = (body["x"], body["y"])
 
                 if next_body["x"] < body["x"]:
-                    active_feature = self.feature_mapping[(square, ("next", "left"))]
+                    active_features.add(self.feature_mapping[(square, "left")])
                 elif next_body["x"] > body["x"]:
-                    active_feature = self.feature_mapping[(square, ("next", "right"))]
+                    active_features.add(self.feature_mapping[(square, "right")])
                 elif next_body["y"] < body["y"]:
-                    active_feature = self.feature_mapping[(square, ("next", "down"))]
+                    active_features.add(self.feature_mapping[(square, "down")])
                 elif next_body["y"] > body["y"]:
-                    active_feature = self.feature_mapping[(square, ("next", "up"))]
+                    active_features.add(self.feature_mapping[(square, "up")])
                 else:
-                    active_feature = self.feature_mapping[(square, ("next", "noop"))]
-
-                active_features.add(active_feature)
-
-            for previous_body, body in zip(snake["body"][:-1], snake["body"][1:]):
-                square = (body["x"], body["y"])
-                previous = "previous"
-
-                if previous_body["x"] < body["x"]:
-                    active_feature = self.feature_mapping[(square, (previous, "left"))]
-                elif previous_body["x"] > body["x"]:
-                    active_feature = self.feature_mapping[(square, (previous, "right"))]
-                elif previous_body["y"] < body["y"]:
-                    active_feature = self.feature_mapping[(square, (previous, "down"))]
-                elif previous_body["y"] > body["y"]:
-                    active_feature = self.feature_mapping[(square, (previous, "up"))]
-                else:
-                    active_feature = self.feature_mapping[(square, (previous, "noop"))]
+                    active_features.add(self.feature_mapping[(square, "noop")])
 
         active_features = tuple(active_features)
         return active_features
@@ -357,23 +340,24 @@ class Logic:
         return: The dictionary of mapping features to indices
         """
         healths = range(1, 100 + 1)
-        piece_types = ["body", "head"]
+        pieces = ["body", "head"]
         lengths = range(3, 11 * 11 + 1)
         directions = ["up", "down", "left", "right", "noop"]
-        colors = ["you", "snake"]
+        players = ["you", "snake"]
 
         feature_mapping = {}
         index = 0
-
         for x in range(11):
             for y in range(11):
+                feature_mapping[((x, y), "food")] = index
+                index += 1
 
                 for health in healths:
                     feature_mapping[((x, y), ("health", health))] = index
                     index += 1
 
-                for piece_type in piece_types:
-                    feature_mapping[((x, y), piece_type)] = index
+                for piece in pieces:
+                    feature_mapping[((x, y), piece)] = index
                     index += 1
 
                 for length in lengths:
@@ -381,22 +365,15 @@ class Logic:
                     index += 1
 
                 for direction in directions:
-                    feature_mapping[((x, y), ("next", direction))] = index
+                    feature_mapping[((x, y), direction)] = index
                     index += 1
 
-                for direction in directions:
-                    feature_mapping[((x, y), ("previous", direction))] = index
+                for player in players:
+                    feature_mapping[((x, y), player)] = index
                     index += 1
-
-                for color in colors:
-                    feature_mapping[((x, y), color)] = index
-                    index += 1
-
-                feature_mapping[((x, y), "food")] = index
-                index += 1
 
         return feature_mapping
 
 
 if __name__ == "__main__":
-    logic = Logic()
+    logic = Logic(None)
