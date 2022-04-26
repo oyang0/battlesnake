@@ -146,34 +146,34 @@ class Logic:
                     greatest_moves = [my_move]
                 elif open_space == greatest_open_space:
                     greatest_moves.append(my_move)
+        
+        if not greatest_moves:
+            greatest_moves = ["up", "down", "left", "right"]
 
         # NNUE - Choose an intelligent direction from the greatest_moves to move in, and then return that move.
-        if len(greatest_moves) > 1:
-            game_id = data["game"]["id"]
-            my_id = data["you"]["id"]
+        game_id = data["game"]["id"]
+        my_id = data["you"]["id"]
 
-            if (game_id, my_id) in self.models:
-                prev = self.features[(game_id, my_id)]
-                next_ = self._get_active_features(data)
-                removed_features = self._get_removed_features(prev, next_)
-                added_features = self._get_added_features(prev, next_)
+        if (game_id, my_id) in self.models:
+            prev = self.features[(game_id, my_id)]
+            next_ = self._get_active_features(data)
+            removed_features = self._get_removed_features(prev, next_)
+            added_features = self._get_added_features(prev, next_)
 
-                model = self.models[(game_id, my_id)]
-                model.update_accumulator(removed_features, added_features)
-                sorted_moves = model.forward().argsort()[::-1]
+            model = self.models[(game_id, my_id)]
+            model.update_accumulator(removed_features, added_features)
+            sorted_moves = model.forward().argsort()[::-1]
 
-                self.features[(game_id, my_id)] = next_
+            self.features[(game_id, my_id)] = next_
 
-                for sorted_move in sorted_moves:
-                    mapped_move = self.move_mapping[sorted_move]
+            for sorted_move in sorted_moves:
+                mapped_move = self.move_mapping[sorted_move]
 
-                    if mapped_move in greatest_moves:
-                        move = mapped_move
-                        break
-            else:
-                move = choice(greatest_moves)
+                if mapped_move in greatest_moves:
+                    move = mapped_move
+                    break
         else:
-            move = greatest_moves[0]
+            move = choice(greatest_moves)
 
         print(
             f"{data['game']['id']} MOVE {data['turn']}: {move} picked from all valid options in {possible_moves}"
