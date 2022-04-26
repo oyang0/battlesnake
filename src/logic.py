@@ -278,37 +278,49 @@ class Logic:
                 active_features.add(self.feature_mapping[(square, "body")])
                 active_features.add(self.feature_mapping[(square, length)])
                 active_features.add(self.feature_mapping[(square, color)])
-
-            for body, next_body in zip(snake["body"][:-1], snake["body"][1:]):
-                square = (body["x"], body["y"])
-
-                if next_body["x"] < body["x"]:
-                    active_feature = self.feature_mapping[(square, ("next", "left"))]
-                elif next_body["x"] > body["x"]:
-                    active_feature = self.feature_mapping[(square, ("next", "right"))]
-                elif next_body["y"] < body["y"]:
-                    active_feature = self.feature_mapping[(square, ("next", "down"))]
-                elif next_body["y"] > body["y"]:
-                    active_feature = self.feature_mapping[(square, ("next", "up"))]
-                else:
-                    active_feature = self.feature_mapping[(square, ("next", "noop"))]
-
-                active_features.add(active_feature)
-
-            for previous_body, body in zip(snake["body"][:-1], snake["body"][1:]):
-                square = (body["x"], body["y"])
-                previous = "previous"
-
-                if previous_body["x"] < body["x"]:
-                    active_feature = self.feature_mapping[(square, (previous, "left"))]
-                elif previous_body["x"] > body["x"]:
-                    active_feature = self.feature_mapping[(square, (previous, "right"))]
-                elif previous_body["y"] < body["y"]:
-                    active_feature = self.feature_mapping[(square, (previous, "down"))]
-                elif previous_body["y"] > body["y"]:
-                    active_feature = self.feature_mapping[(square, (previous, "up"))]
-                else:
-                    active_feature = self.feature_mapping[(square, (previous, "noop"))]
+                
+                for previous_body, body, next_body in zip(
+                    snake["body"][:-2], snake["body"][1:-1], snake["body"][2:]
+                ):
+                    square = (body["x"], body["y"])
+                    if previous_body["x"] < body["x"]:
+                        active_features.add(
+                            self.feature_mapping[(square, ("previous", "left"))]
+                        )
+                    elif previous_body["x"] > body["x"]:
+                        active_features.add(
+                            self.feature_mapping[(square, ("previous", "right"))]
+                        )
+                    elif previous_body["y"] < body["y"]:
+                        active_features.add(
+                            self.feature_mapping[(square, ("previous", "down"))]
+                        )
+                    elif previous_body["y"] > body["y"]:
+                        active_features.add(
+                            self.feature_mapping[(square, ("previous", "up"))]
+                        )
+                    else:
+                        active_features.add(
+                            self.feature_mapping[(square, ("previous", "noop"))]
+                        )
+                    if next_body["x"] < body["x"]:
+                        active_features.add(
+                            self.feature_mapping[(square, ("next", "left"))]
+                        )
+                    elif next_body["x"] > body["x"]:
+                        active_features.add(
+                            self.feature_mapping[(square, ("next", "right"))]
+                        )
+                    elif next_body["y"] < body["y"]:
+                        active_features.add(
+                            self.feature_mapping[(square, ("next", "down"))]
+                        )
+                    elif next_body["y"] > body["y"]:
+                        active_features.add(self.feature_mapping[(square, ("next", "up"))])
+                    else:
+                        active_features.add(
+                            self.feature_mapping[(square, ("next", "noop"))]
+                        )
 
                 active_features.add(active_feature)
 
