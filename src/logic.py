@@ -94,7 +94,9 @@ class Logic:
         for each move of the game.
 
         """
-        my_snake = data["you"]  # A dictionary describing your snake's position on the board
+        my_snake = data[
+            "you"
+        ]  # A dictionary describing your snake's position on the board
         my_head = my_snake["head"]  # A dictionary of coordinates like {"x": 0, "y": 0}
         # my_body = my_snake["body"]  # A list of coordinate dictionaries like [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 2, "y": 0}]
 
@@ -146,7 +148,7 @@ class Logic:
                     greatest_moves = [my_move]
                 elif open_space == greatest_open_space:
                     greatest_moves.append(my_move)
-        
+
         if not greatest_moves:
             greatest_moves = ["up", "down", "left", "right"]
 
@@ -278,51 +280,49 @@ class Logic:
                 active_features.add(self.feature_mapping[(square, "body")])
                 active_features.add(self.feature_mapping[(square, length)])
                 active_features.add(self.feature_mapping[(square, color)])
-                
-                for previous_body, body, next_body in zip(
-                    snake["body"][:-2], snake["body"][1:-1], snake["body"][2:]
-                ):
-                    square = (body["x"], body["y"])
-                    if previous_body["x"] < body["x"]:
-                        active_features.add(
-                            self.feature_mapping[(square, ("previous", "left"))]
-                        )
-                    elif previous_body["x"] > body["x"]:
-                        active_features.add(
-                            self.feature_mapping[(square, ("previous", "right"))]
-                        )
-                    elif previous_body["y"] < body["y"]:
-                        active_features.add(
-                            self.feature_mapping[(square, ("previous", "down"))]
-                        )
-                    elif previous_body["y"] > body["y"]:
-                        active_features.add(
-                            self.feature_mapping[(square, ("previous", "up"))]
-                        )
-                    else:
-                        active_features.add(
-                            self.feature_mapping[(square, ("previous", "noop"))]
-                        )
-                    if next_body["x"] < body["x"]:
-                        active_features.add(
-                            self.feature_mapping[(square, ("next", "left"))]
-                        )
-                    elif next_body["x"] > body["x"]:
-                        active_features.add(
-                            self.feature_mapping[(square, ("next", "right"))]
-                        )
-                    elif next_body["y"] < body["y"]:
-                        active_features.add(
-                            self.feature_mapping[(square, ("next", "down"))]
-                        )
-                    elif next_body["y"] > body["y"]:
-                        active_features.add(self.feature_mapping[(square, ("next", "up"))])
-                    else:
-                        active_features.add(
-                            self.feature_mapping[(square, ("next", "noop"))]
-                        )
 
-                active_features.add(active_feature)
+            for previous_body, body, next_body in zip(
+                snake["body"][:-2], snake["body"][1:-1], snake["body"][2:]
+            ):
+                square = (body["x"], body["y"])
+                if previous_body["x"] < body["x"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("previous", "left"))]
+                    )
+                elif previous_body["x"] > body["x"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("previous", "right"))]
+                    )
+                elif previous_body["y"] < body["y"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("previous", "down"))]
+                    )
+                elif previous_body["y"] > body["y"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("previous", "up"))]
+                    )
+                else:
+                    active_features.add(
+                        self.feature_mapping[(square, ("previous", "noop"))]
+                    )
+                if next_body["x"] < body["x"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("next", "left"))]
+                    )
+                elif next_body["x"] > body["x"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("next", "right"))]
+                    )
+                elif next_body["y"] < body["y"]:
+                    active_features.add(
+                        self.feature_mapping[(square, ("next", "down"))]
+                    )
+                elif next_body["y"] > body["y"]:
+                    active_features.add(self.feature_mapping[(square, ("next", "up"))])
+                else:
+                    active_features.add(
+                        self.feature_mapping[(square, ("next", "noop"))]
+                    )
 
         active_features = tuple(active_features)
 
